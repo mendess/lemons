@@ -1,6 +1,5 @@
 mod layer_thread;
 mod persistent_commands;
-mod signal;
 mod timed_blocks;
 mod trayer;
 mod update_signal;
