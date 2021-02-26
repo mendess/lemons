@@ -1,5 +1,4 @@
-use crate::color::Color;
-use crate::one_or_more::OneOrMore;
+use crate::{global_config, color::Color, one_or_more::OneOrMore};
 use std::{
     io,
     process::{Command, Stdio},
@@ -37,12 +36,14 @@ impl<'a> Content<'a> {
         }
     }
 
-    pub fn update(&self) {
+    pub fn update(&self, layer: u16) {
         if let Self::Cmd { cmd, last_run } = self {
             for m in 0..last_run.len() {
                 match Command::new("sh")
                     .args(&["-c", cmd])
                     .env("MONITOR", m.to_string())
+                    .envs(global_config::get().colors().map(|(k, v)| (k, v.0)))
+                    .env("LAYER", layer.to_string())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::inherit())
                     .spawn()

@@ -39,21 +39,21 @@ impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
         }
         write!(f, "{} ", DisplayContent(&b.content, *mon))?;
         (0..num_cmds).try_for_each(|_| f.write_str("%{A}"))?;
-        if let Some(_) = &b.offset {
-            f.lemon('O', "0")?;
-        }
-        if let Some(_) = &b.bg {
-            f.lemon('B', "-")?;
-        }
-        if let Some(_) = &b.fg {
-            f.lemon('F', "-")?;
+        if let Some(_) = &b.font {
+            f.lemon('T', "-")?;
         }
         if let Some(_) = &b.un {
             f.lemon('U', "-")?;
             f.write_str("%{-u}")?;
         }
-        if let Some(_) = &b.font {
-            f.lemon('T', "-")?;
+        if let Some(_) = &b.fg {
+            f.lemon('F', "-")?;
+        }
+        if let Some(_) = &b.bg {
+            f.lemon('B', "-")?;
+        }
+        if let Some(_) = &b.offset {
+            f.lemon('O', "0")?;
         }
         Ok(())
     }

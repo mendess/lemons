@@ -17,10 +17,11 @@ pub fn timed_blocks(
     let ch = ch.clone();
     thread::spawn(move || {
         while let (Some(c), Some(layer)) = (config.upgrade(), layer.upgrade()) {
+            let layer = layer.load(Ordering::Relaxed);
             for block in c
                 .values()
                 .flatten()
-                .filter(|b| b.layer == layer.load(Ordering::Relaxed))
+                .filter(|b| b.layer == layer)
             {
                 if let Some((interval, mut b_timer)) = block
                     .interval
@@ -30,7 +31,7 @@ pub fn timed_blocks(
                     match b_timer.checked_sub(Duration::from_secs(1)) {
                         Some(d) => *b_timer = d,
                         None => {
-                            block.content.update();
+                            block.content.update(layer);
                             *b_timer = *interval;
                         }
                     }

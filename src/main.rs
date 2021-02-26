@@ -8,57 +8,31 @@ pub use model::block::{self, Alignment, Block};
 pub use model::color::{self, Color};
 pub use model::global_config::{self, GlobalConfig};
 use parsing::parse;
+use structopt::StructOpt;
 
-use std::{collections::HashMap, env, fs, io};
+use std::{collections::HashMap, env, fs, io, path::PathBuf};
 
 type Config<'a> = HashMap<Alignment, Vec<Block<'a>>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, StructOpt)]
+#[structopt(name = "lemons")]
 struct Args {
-    config: Option<String>,
+    #[structopt(short, long, help("Path to the config file"))]
+    config: Option<PathBuf>,
+    #[structopt(short, long("--bar"), help("The parameters to pass to each bar"))]
     bars: Vec<String>,
+    #[structopt(short, long)]
     tray: bool,
-}
-
-fn arg_parse() -> io::Result<Args> {
-    let mut args = Args::default();
-    let mut argv = env::args().skip(1);
-    while let Some(arg) = argv.next() {
-        match arg.as_str() {
-            "-c" | "--config" => {
-                args.config = Some(fs::read_to_string(argv.next().ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        "Expected argument to geometry parameter",
-                    )
-                })?)?);
-            }
-            "-t" | "--tray" => args.tray = true,
-            "-b" | "--bar" => {
-                args.bars.push(argv.next().ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        "Expected argument to geometry parameter",
-                    )
-                })?);
-            }
-            _ => (),
-        }
-    }
-    Ok(args)
 }
 
 // TODO:
 // Manpage
 // - Sdir
 // - attribute
-//
-// Features
-// - Signal
 fn main() -> io::Result<()> {
-    let args = arg_parse()?;
+    let args = Args::from_args();
     let input = if let Some(input) = args.config {
-        input
+        fs::read_to_string(input)?
     } else {
         if let Some(arg) = env::var_os("XDG_CONFIG") {
             fs::read_to_string(arg)?

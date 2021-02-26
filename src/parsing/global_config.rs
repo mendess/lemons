@@ -56,8 +56,7 @@ impl<'a> TryFrom<&'a str> for GlobalConfig<'a> {
                         let (key, value) = parse_key_value(color)?;
                         eprintln!("{}: {}", key, value);
                         global_config
-                            .colors
-                            .insert(key, Color::from_str(value).map_err(|e| (value, e))?);
+                            .set_color(key, Color::from_str(value).map_err(|e| (value, e))?);
                     }
                     if failed {
                         return Err(("", "expected a '}' at the end of the colors definition"));

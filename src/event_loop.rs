@@ -78,7 +78,11 @@ pub fn start_event_loop(config: Config<'static>) {
     if global_config.tray {
         t.push(trayer(&global_config, sx.clone()));
     }
-    t.push(update_signal(Arc::downgrade(&config), &sx));
+    t.push(update_signal(
+        Arc::downgrade(&config),
+        Arc::downgrade(&current_layer),
+        &sx,
+    ));
     t.push(layer_thread(
         Arc::downgrade(&current_layer),
         global_config.n_layers,
@@ -91,6 +95,9 @@ pub fn start_event_loop(config: Config<'static>) {
         let mut tray_offset = last_offset;
         for (i, child) in lemon_inputs.iter_mut().enumerate() {
             let line = build_line(&global_config, &config, &current_layer, tray_offset, i);
+            if cfg!(debug_assertions) {
+                eprintln!("{}", line);
+            }
             tray_offset = 0;
             if let Err(e) = child.1.write_all(line.as_bytes()) {
                 eprintln!("Couldn't talk to lemon bar :( {:?}", e);

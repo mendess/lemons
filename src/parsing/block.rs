@@ -2,8 +2,9 @@ use super::{parse_key_value, ParseError};
 use crate::{
     block::{Alignment, Block, Content, Layer},
     Color,
+    GlobalConfig
 };
-use std::{collections::HashMap, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 impl FromStr for Alignment {
     type Err = &'static str;
@@ -34,15 +35,15 @@ impl<'a> Block<'a> {
     pub fn parse(
         block: &'a str,
         n_monitor: usize,
-        colors: &HashMap<&'a str, Color<'a>>,
+        gconfig: &GlobalConfig<'a>,
     ) -> Result<Self, ParseError<'a>> {
         let mut block_b = BlockBuilder::default();
         for opt in block.split('\n').skip(1).filter(|s| !s.trim().is_empty()) {
             let (key, value) = parse_key_value(opt)?;
             eprintln!("{}: {}", key, value);
             let color = || {
-                colors
-                    .get(value)
+                gconfig
+                    .get_color(value)
                     .map(|&c| c)
                     .ok_or(("", ""))
                     .or_else(|_| Color::from_str(value).map_err(|e| (opt, e)))

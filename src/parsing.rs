@@ -20,7 +20,7 @@ pub fn parse(config: &'static str, bars: Vec<String>, tray: bool) -> Result<Conf
         .map(GlobalConfig::try_from)
         .unwrap_or_else(|| Ok(Default::default()))?;
     for block in blocks_iter {
-        let b = Block::parse(block, bars.len(), &global_config.colors)?;
+        let b = Block::parse(block, bars.len(), &global_config)?;
         if let Layer::L(n) = b.layer {
             global_config.n_layers = global_config.n_layers.max(n);
         }

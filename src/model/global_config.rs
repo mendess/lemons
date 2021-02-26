@@ -29,7 +29,7 @@ pub struct GlobalConfig<'a> {
     pub separator: Option<&'a str>,
     pub tray: bool,
     pub n_layers: u16,
-    pub colors: HashMap<&'a str, Color<'a>>,
+    colors: HashMap<String, Color<'a>>,
 }
 
 impl<'a> GlobalConfig<'a> {
@@ -69,6 +69,20 @@ impl<'a> GlobalConfig<'a> {
         }
         vector.extend_from_slice(&["-d".into()]);
         vector
+    }
+
+    pub fn get_color<'s>(&'s self, name: &str) -> Option<&'s Color<'a>> {
+        let k = format!("LEMON_{}", name.to_uppercase());
+        self.colors.get(&k)
+    }
+
+    pub fn set_color(&mut self, name: &str, value: Color<'a>) -> Option<Color<'a>> {
+        self.colors
+            .insert(format!("LEMON_{}", name.to_uppercase()), value.into())
+    }
+
+    pub fn colors<'s>(&'s self) -> impl Iterator<Item = (&'s str, &'s Color<'a>)> {
+        self.colors.iter().map(|(s, c)| (s.as_str(), c))
     }
 }
 

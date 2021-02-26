@@ -1,7 +1,6 @@
 use super::Event;
-use crate::{block::Content, global_config, Color, Config};
+use crate::{block::Content, global_config, Config};
 use std::{
-    collections::HashMap,
     io::{BufRead, BufReader},
     process::{Command, Stdio},
     sync::{mpsc, Arc, RwLock},
@@ -24,8 +23,7 @@ pub fn persistent_block_threads(config: &Config, sx: &mpsc::Sender<Event>) -> Ve
             let cmd = cmd.to_string();
             let ch = sx.clone();
             let r = Arc::clone(&r);
-            let global_config = global_config::get();
-            thread::spawn(move || persistent_command(cmd, ch, r, m, &global_config.colors))
+            thread::spawn(move || persistent_command(cmd, ch, r, m))
         })
         .collect::<Vec<_>>()
 }
@@ -35,13 +33,12 @@ fn persistent_command<'a>(
     ch: mpsc::Sender<Event>,
     last_run: Arc<RwLock<String>>,
     monitor: usize,
-    colors: &HashMap<&'a str, Color<'a>>,
 ) {
     let mut persistent_cmd = Command::new("sh")
         .args(&["-c", &cmd])
         .stdout(Stdio::piped())
         .env("MONITOR", &monitor.to_string())
-        .envs(colors.iter().map(|(k, v)| (k, v.0)))
+        .envs(global_config::get().colors().map(|(k, v)| (k, v.0)))
         .spawn()
         .expect("Couldn't start persistent cmd");
     let _ = BufReader::new(
