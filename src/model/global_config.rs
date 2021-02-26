@@ -1,7 +1,7 @@
 use crate::color::Color;
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, iter::once, sync::Arc};
 
 pub static GLOBAL_CONFIG: Lazy<ArcSwap<GlobalConfig<'static>>> =
     Lazy::new(|| ArcSwap::from_pointee(Default::default()));
@@ -29,7 +29,7 @@ pub struct GlobalConfig<'a> {
     pub separator: Option<&'a str>,
     pub tray: bool,
     pub n_layers: u16,
-    colors: HashMap<String, Color<'a>>,
+    colors: HashMap<&'a str, (String, Color<'a>)>,
 }
 
 impl<'a> GlobalConfig<'a> {
@@ -72,17 +72,22 @@ impl<'a> GlobalConfig<'a> {
     }
 
     pub fn get_color<'s>(&'s self, name: &str) -> Option<&'s Color<'a>> {
-        let k = format!("LEMON_{}", name.to_uppercase());
-        self.colors.get(&k)
+        self.colors.get(name).map(|x| &x.1)
     }
 
-    pub fn set_color(&mut self, name: &str, value: Color<'a>) -> Option<Color<'a>> {
+    pub fn set_color(&mut self, name: &'a str, value: Color<'a>) -> Option<Color<'a>> {
+        let env_var = format!("LEMON_{}", name.to_uppercase());
         self.colors
-            .insert(format!("LEMON_{}", name.to_uppercase()), value.into())
+            .insert(name, (env_var, value.into()))
+            .map(|x| x.1)
     }
 
-    pub fn colors<'s>(&'s self) -> impl Iterator<Item = (&'s str, &'s Color<'a>)> {
-        self.colors.iter().map(|(s, c)| (s.as_str(), c))
+    pub fn as_env_vars(&self) -> impl Iterator<Item = (&str, &str)> {
+        let color = |c: &Option<Color<'a>>| c.map(|c| c.0).unwrap_or("");
+        once(("LEMON_BG", color(&self.background)))
+            .chain(once(("LEMON_FG", color(&self.foreground))))
+            .chain(once(("LEMON_UN", color(&self.underline))))
+            .chain(self.colors.iter().map(|(_, (k, v))| (k.as_str(), v.0)))
     }
 }
 

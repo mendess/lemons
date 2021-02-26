@@ -42,7 +42,7 @@ impl<'a> Content<'a> {
                 match Command::new("sh")
                     .args(&["-c", cmd])
                     .env("MONITOR", m.to_string())
-                    .envs(global_config::get().colors().map(|(k, v)| (k, v.0)))
+                    .envs(global_config::get().as_env_vars())
                     .env("LAYER", layer.to_string())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::inherit())

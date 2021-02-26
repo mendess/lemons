@@ -38,7 +38,7 @@ fn persistent_command<'a>(
         .args(&["-c", &cmd])
         .stdout(Stdio::piped())
         .env("MONITOR", &monitor.to_string())
-        .envs(global_config::get().colors().map(|(k, v)| (k, v.0)))
+        .envs(global_config::get().as_env_vars())
         .spawn()
         .expect("Couldn't start persistent cmd");
     let _ = BufReader::new(
