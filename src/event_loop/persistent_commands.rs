@@ -9,7 +9,7 @@ use std::{
 
 pub fn persistent_block_threads(config: &Config, sx: &mpsc::Sender<Event>) -> Vec<JoinHandle<()>> {
     config
-        .values()
+        .iter()
         .flat_map(|blocks| blocks.iter())
         .filter_map(|b| {
             if let Content::Persistent { cmd, last_run } = &b.content {

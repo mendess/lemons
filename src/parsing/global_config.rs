@@ -1,22 +1,18 @@
-use super::{parse_key_value, ParseError};
+use super::{parser::KeyValues, ParseError, Result};
 use crate::{Color, GlobalConfig};
-use std::convert::TryFrom;
 
-impl<'a> TryFrom<&'a str> for GlobalConfig<'a> {
-    type Error = ParseError<'a>;
-    fn try_from(globals: &'a str) -> Result<Self, Self::Error> {
-        let mut global_config = Self::default();
-        let mut opts = globals.split('\n').filter(|s| !s.trim().is_empty());
-        while let Some(opt) = opts.next() {
-            let (key, value) = parse_key_value(opt)?;
+impl<'a> GlobalConfig<'a> {
+    pub fn from_kvs(iter: KeyValues<'a, '_>) -> Result<'a, Self> {
+        let mut global_config = GlobalConfig::default();
+        let mut in_colors = false;
+        for kvl in iter {
+            let (key, value, level) = kvl?;
+            in_colors = in_colors && level > 1;
+            (1..level).for_each(|_| eprint!(" "));
             eprintln!("{}: {}", key, value);
-            let color = || Color::from_str(value).map_err(|e| (opt, e));
-            match key
-                .trim()
-                .trim_start_matches('*')
-                .trim_start_matches('-')
-                .trim()
-            {
+            let color =
+                || Color::from_str(value).map_err(|error| ParseError::Color { value, error });
+            match key {
                 "background" | "bg" | "B" => global_config.background = Some(color()?),
                 "foreground" | "fg" | "F" => global_config.foreground = Some(color()?),
                 "underline" | "un" | "U" => global_config.underline = Some(color()?),
@@ -25,14 +21,14 @@ impl<'a> TryFrom<&'a str> for GlobalConfig<'a> {
                     global_config.bottom = value
                         .trim()
                         .parse()
-                        .map_err(|_| (opt, "Not a valid boolean"))?
+                        .map_err(|_| ParseError::InvalidBoolean(value))?
                 }
                 "n_clickables" | "a" => {
                     global_config.n_clickbles = Some(
                         value
                             .trim()
                             .parse()
-                            .map_err(|_| (opt, "Not a valid number"))?,
+                            .map_err(|_| ParseError::InvalidInteger(value))?,
                     )
                 }
                 "underline_width" | "u" => {
@@ -40,32 +36,20 @@ impl<'a> TryFrom<&'a str> for GlobalConfig<'a> {
                         value
                             .trim()
                             .parse()
-                            .map_err(|_| (opt, "Not a valid number"))?,
+                            .map_err(|_| ParseError::InvalidInteger(value))?,
                     )
                 }
                 "separator" => global_config.separator = Some(value),
                 "geometry" | "g" => global_config.base_geometry = Some(value.into()),
                 "name" | "n" => global_config.name = Some(value),
-                "colors" | "colours" | "c" if value.trim() == "{" => {
-                    let mut failed = true;
-                    while let Some(color) = opts.next().map(str::trim) {
-                        if color == "}" {
-                            failed = false;
-                            break;
-                        }
-                        let (key, value) = parse_key_value(color)?;
-                        eprintln!("{}: {}", key, value);
-                        global_config
-                            .set_color(key, Color::from_str(value).map_err(|e| (value, e))?);
-                    }
-                    if failed {
-                        return Err(("", "expected a '}' at the end of the colors definition"));
-                    }
+                "colors" | "colours" | "c" => in_colors = true,
+                key if level == 2 && in_colors => {
+                    global_config.set_color(key, color()?);
                 }
                 s => {
                     eprintln!("Warning: unrecognised option '{}', skipping", s);
                 }
-            }
+            };
         }
         Ok(global_config)
     }

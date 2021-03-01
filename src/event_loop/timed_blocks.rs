@@ -19,7 +19,7 @@ pub fn timed_blocks(
         while let (Some(c), Some(layer)) = (config.upgrade(), layer.upgrade()) {
             let layer = layer.load(Ordering::Relaxed);
             for block in c
-                .values()
+                .iter()
                 .flatten()
                 .filter(|b| b.layer == layer)
             {

@@ -7,14 +7,16 @@ mod update_signal;
 use crate::{
     block::Alignment,
     display::{DisplayBlock, Lemonbar},
-    Block, Config, GlobalConfig,
+    Config, GlobalConfig,
 };
+use enum_iterator::IntoEnumIterator;
 use layer_thread::layer_thread;
 use persistent_commands::persistent_block_threads;
 use std::{
     ffi::OsStr,
     fmt::Write as _,
     io::Write as _,
+    iter::successors,
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -126,33 +128,23 @@ fn build_line(
     tray_offset: u32,
     monitor: usize,
 ) -> String {
-    let mut line = String::new();
-    let add_blocks = |blocks: &[Block], l: &mut String| {
-        blocks
-            .iter()
-            .filter(|b| !b.content.is_empty(monitor))
-            .filter(|b| b.layer == layer.load(Ordering::SeqCst))
-            .map(|b| DisplayBlock(b, monitor))
-            .zip(std::iter::successors(Some(Some("")), |_| {
-                Some(global_config.separator)
-            }))
-            .for_each(|(b, s)| {
-                s.map(|s| l.push_str(s));
-                write!(l, "{}", b).unwrap();
-            })
-    };
-    if let Some(blocks) = config.get(&Alignment::Left) {
-        line.push_str("%{l}");
-        add_blocks(blocks, &mut line);
-    }
-    if let Some(blocks) = config.get(&Alignment::Middle) {
-        line.push_str("%{c}");
-        add_blocks(blocks, &mut line);
-    }
-    if let Some(blocks) = config.get(&Alignment::Right) {
-        line.push_str("%{r}");
-        add_blocks(blocks, &mut line);
-    }
+    let mut line = Alignment::into_enum_iter()
+        .map(|a| (a, &config[a]))
+        .filter(|(_, c)| !c.is_empty())
+        .fold(String::new(), |mut line, (al, blocks)| {
+            line.push_str(al.to_lemon());
+            blocks
+                .iter()
+                .filter(|b| !b.content.is_empty(monitor))
+                .filter(|b| b.layer == layer.load(Ordering::SeqCst))
+                .map(|b| DisplayBlock(b, monitor))
+                .zip(successors(Some(None), |_| Some(global_config.separator)))
+                .for_each(|(b, s)| {
+                    s.map(|s| line.push_str(s));
+                    write!(line, "{}", b).unwrap();
+                });
+            line
+        });
     line.lemon('O', tray_offset).unwrap();
     line + "\n"
 }

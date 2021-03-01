@@ -1,14 +1,13 @@
-use super::{parse_key_value, ParseError};
+use super::{parser::KeyValues, ParseError, Result};
 use crate::{
     block::{Alignment, Block, Content, Layer},
-    Color,
-    GlobalConfig
+    Color, GlobalConfig,
 };
-use std::{str::FromStr, time::Duration};
+use std::{result::Result as StdResult, str::FromStr, time::Duration};
 
 impl FromStr for Alignment {
     type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
+    fn from_str(s: &str) -> StdResult<Self, <Self as FromStr>::Err> {
         match s {
             "left" | "Left" => Ok(Self::Left),
             "middle" | "Middle" => Ok(Self::Middle),
@@ -20,7 +19,7 @@ impl FromStr for Alignment {
 
 impl FromStr for Layer {
     type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> StdResult<Self, Self::Err> {
         match s {
             "all" | "All" => Ok(Self::All),
             s => match s.parse::<u16>() {
@@ -32,33 +31,34 @@ impl FromStr for Layer {
 }
 
 impl<'a> Block<'a> {
-    pub fn parse(
-        block: &'a str,
-        n_monitor: usize,
+    pub fn from_kvs<'parser>(
         gconfig: &GlobalConfig<'a>,
-    ) -> Result<Self, ParseError<'a>> {
+        iter: KeyValues<'a, 'parser>,
+        n_monitor: usize,
+    ) -> Result<'a, Self> {
         let mut block_b = BlockBuilder::default();
-        for opt in block.split('\n').skip(1).filter(|s| !s.trim().is_empty()) {
-            let (key, value) = parse_key_value(opt)?;
+        for kvl in iter {
+            let (key, value, _) = kvl?;
             eprintln!("{}: {}", key, value);
             let color = || {
                 gconfig
                     .get_color(value)
                     .map(|&c| c)
                     .ok_or(("", ""))
-                    .or_else(|_| Color::from_str(value).map_err(|e| (opt, e)))
+                    .or_else(|_| {
+                        Color::from_str(value).map_err(|error| ParseError::Color { value, error })
+                    })
             };
-            block_b = match key
-                .trim()
-                .trim_start_matches('*')
-                .trim_start_matches('-')
-                .trim()
-            {
+            match key {
                 "background" | "bg" => block_b.bg(color()?),
                 "foreground" | "fg" => block_b.fg(color()?),
                 "underline" | "un" => block_b.un(color()?),
-                "font" => block_b.font(value).map_err(|e| (opt, e))?,
-                "offset" => block_b.offset(value).map_err(|_| (opt, "invalid offset"))?,
+                "font" => block_b
+                    .font(value)
+                    .map_err(|error| ParseError::InvalidFont { value, error })?,
+                "offset" => block_b
+                    .offset(value)
+                    .map_err(|_| ParseError::InvalidOffset(value))?,
                 "left-click" => block_b.action(0, value),
                 "middle-click" => block_b.action(1, value),
                 "right-click" => block_b.action(2, value),
@@ -67,32 +67,48 @@ impl<'a> Block<'a> {
                 "interval" => block_b.interval(Duration::from_secs(
                     value
                         .parse::<u64>()
-                        .map_err(|_| (opt, "Invalid duration"))?,
+                        .map_err(|_| ParseError::InvalidDuration(value))?,
                 )),
                 "command" | "cmd" => block_b.content_command(value),
                 "static" => block_b.content_static(value),
                 "persistent" => block_b.content_persistent(value),
-                "alignment" | "align" => block_b.alignment(value.parse().map_err(|e| (opt, e))?),
-                "signal" => block_b.signal(value.parse().map_err(|_| (opt, "Invalid boolean"))?),
-                "raw" => block_b.raw(value.parse().map_err(|_| (opt, "Invalid boolean"))?),
-                "multi_monitor" => {
-                    block_b.multi_monitor(value.parse().map_err(|_| (opt, "Invalid boolean"))?)
+                "alignment" | "align" => block_b.alignment(
+                    value
+                        .parse()
+                        .map_err(|_| ParseError::InvalidAlignment(value))?,
+                ),
+                "signal" => block_b.signal(
+                    value
+                        .parse()
+                        .map_err(|_| ParseError::InvalidBoolean(value))?,
+                ),
+                "raw" => block_b.raw(
+                    value
+                        .parse()
+                        .map_err(|_| ParseError::InvalidBoolean(value))?,
+                ),
+                "multi_monitor" => block_b.multi_monitor(
+                    value
+                        .parse()
+                        .map_err(|_| ParseError::InvalidBoolean(value))?,
+                ),
+                "layer" => {
+                    block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?)
                 }
-                "layer" => block_b.layer(value.parse().map_err(|e| (opt, e))?),
                 s => {
                     eprintln!("Warning: unrecognised option '{}', skipping", s);
-                    block_b
+                    &mut block_b
                 }
             };
         }
-        block_b
+        Ok(block_b
             .build(n_monitor)
-            .map_err(|e| ("BLOCK DEFINITION", e))
+            .map_err(|e| ParseError::MalformedBlock(e))?)
     }
 }
 
 #[derive(Default)]
-struct BlockBuilder<'a> {
+pub struct BlockBuilder<'a> {
     bg: Option<Color<'a>>,
     fg: Option<Color<'a>>,
     un: Option<Color<'a>>,
@@ -109,112 +125,93 @@ struct BlockBuilder<'a> {
 }
 
 impl<'a> BlockBuilder<'a> {
-    fn raw(self, r: bool) -> Self {
-        Self { raw: r, ..self }
+    fn raw(&mut self, r: bool) -> &mut Self {
+        self.raw = r;
+        self
     }
 
-    fn action(mut self, index: usize, action: &'a str) -> Self {
+    fn action(&mut self, index: usize, action: &'a str) -> &mut Self {
         self.actions[index] = Some(action);
         self
     }
 
-    fn bg(self, c: Color<'a>) -> Self {
-        Self {
-            bg: Some(c),
-            ..self
-        }
+    fn bg(&mut self, c: Color<'a>) -> &mut Self {
+        self.bg = Some(c);
+        self
     }
 
-    fn fg(self, c: Color<'a>) -> Self {
-        Self {
-            fg: Some(c),
-            ..self
-        }
+    fn fg(&mut self, c: Color<'a>) -> &mut Self {
+        self.fg = Some(c);
+        self
     }
 
-    fn un(self, c: Color<'a>) -> Self {
-        Self {
-            un: Some(c),
-            ..self
-        }
+    fn un(&mut self, c: Color<'a>) -> &mut Self {
+        self.un = Some(c);
+        self
     }
 
-    fn font(self, font: &'a str) -> Result<Self, &'static str> {
+    fn font(&mut self, font: &'a str) -> StdResult<&mut Self, &'static str> {
         if font == "-" || font.parse::<u32>().map_err(|_| "Invalid font")? > 0 {
-            Ok(Self {
-                font: Some(font),
-                ..self
-            })
+            self.font = Some(font);
+            Ok(self)
         } else {
             Err("Invalid index")
         }
     }
 
-    fn offset(self, o: &'a str) -> Result<Self, <u32 as FromStr>::Err> {
+    fn offset(&mut self, o: &'a str) -> StdResult<&mut Self, <u32 as FromStr>::Err> {
         o.parse::<u32>()?;
-        Ok(Self {
-            offset: Some(o),
-            ..self
-        })
+        self.offset = Some(o);
+        Ok(self)
     }
 
-    fn content_command(self, c: &'a str) -> Self {
-        Self {
-            content: Some(Content::Cmd {
-                cmd: c,
-                last_run: Default::default(),
-            }),
-            ..self
-        }
+    fn content_command(&mut self, c: &'a str) -> &mut Self {
+        self.content = Some(Content::Cmd {
+            cmd: c,
+            last_run: Default::default(),
+        });
+        self
     }
 
-    fn content_static(self, c: &'a str) -> Self {
-        Self {
-            content: Some(Content::Static(c)),
-            ..self
-        }
+    fn content_static(&mut self, c: &'a str) -> &mut Self {
+        self.content = Some(Content::Static(c));
+        self
     }
 
-    fn content_persistent(self, c: &'a str) -> Self {
-        Self {
-            content: Some(Content::Persistent {
-                cmd: c,
-                last_run: Default::default(),
-            }),
-            ..self
-        }
+    fn content_persistent(&mut self, c: &'a str) -> &mut Self {
+        self.content = Some(Content::Persistent {
+            cmd: c,
+            last_run: Default::default(),
+        });
+        self
     }
 
-    fn interval(self, i: Duration) -> Self {
-        Self {
-            interval: Some(i),
-            ..self
-        }
+    fn interval(&mut self, i: Duration) -> &mut Self {
+        self.interval = Some(i);
+        self
     }
 
-    fn alignment(self, a: Alignment) -> Self {
-        Self {
-            alignment: Some(a),
-            ..self
-        }
+    fn alignment(&mut self, a: Alignment) -> &mut Self {
+        self.alignment = Some(a);
+        self
     }
 
-    fn signal(self, b: bool) -> Self {
-        Self { signal: b, ..self }
+    fn signal(&mut self, b: bool) -> &mut Self {
+        self.signal = b;
+        self
     }
 
-    fn multi_monitor(self, b: bool) -> Self {
-        Self {
-            multi_monitor: b,
-            ..self
-        }
+    fn multi_monitor(&mut self, b: bool) -> &mut Self {
+        self.multi_monitor = b;
+        self
     }
 
-    fn layer(self, layer: Layer) -> Self {
-        Self { layer, ..self }
+    fn layer(&mut self, layer: Layer) -> &mut Self {
+        self.layer = layer;
+        self
     }
 
-    fn build(self, n_monitor: usize) -> Result<Block<'a>, &'static str> {
+    pub fn build(self, n_monitor: usize) -> StdResult<Block<'a>, &'static str> {
         let n_monitor = if self.multi_monitor { n_monitor } else { 1 };
         if let Some(content) = self.content {
             if let Some(alignment) = self.alignment {

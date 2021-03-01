@@ -1,30 +1,45 @@
 mod block;
 mod color;
 mod global_config;
+mod parser;
 
 use crate::{block::Layer, Block, Config, GlobalConfig};
-use std::convert::TryFrom;
 
-pub type ParseError<'a> = (&'a str, &'a str);
-
-pub fn parse_key_value(s: &str) -> Result<(&str, &str), ParseError<'_>> {
-    let (a, b) = s.split_at(s.find(':').ok_or((s, "missing :"))?);
-    Ok((a, b[1..].trim().trim_matches('\'')))
+#[derive(Debug)]
+pub enum ParseError<'a> {
+    Colon(&'a str),
+    ExpectedTitle(&'a str),
+    ExpectedAttribute(&'a str),
+    Color { value: &'a str, error: &'static str },
+    InvalidBoolean(&'a str),
+    InvalidInteger(&'a str),
+    InvalidDuration(&'a str),
+    InvalidOffset(&'a str),
+    InvalidFont { value: &'a str, error: &'static str },
+    InvalidAlignment(&'a str),
+    InvalidLayer(&'a str),
+    MalformedBlock(&'static str),
 }
 
-pub fn parse(config: &'static str, bars: Vec<String>, tray: bool) -> Result<Config, ParseError> {
-    let mut blocks = Config::with_capacity(3);
-    let mut blocks_iter = config.split("\n>");
-    let mut global_config = blocks_iter
-        .next()
-        .map(GlobalConfig::try_from)
+pub type Result<'a, T> = std::result::Result<T, ParseError<'a>>;
+
+const BLOCKS_INIT: Config = [Vec::new(), Vec::new(), Vec::new()];
+
+pub fn parse(config: &'static str, bars: Vec<String>, tray: bool) -> Result<Config> {
+    let mut parser = parser::Parser::new(config);
+    let mut global_config = parser
+        .next_section()?
+        .map(|(_, kvs)| kvs)
+        .map(GlobalConfig::from_kvs)
         .unwrap_or_else(|| Ok(Default::default()))?;
-    for block in blocks_iter {
-        let b = Block::parse(block, bars.len(), &global_config)?;
-        if let Layer::L(n) = b.layer {
-            global_config.n_layers = global_config.n_layers.max(n);
+
+    let mut blocks = BLOCKS_INIT;
+    while let Some(section) = parser.next_section()? {
+        let block = Block::from_kvs(&global_config, section.1, bars.len())?;
+        if let Layer::L(l) = block.layer {
+            global_config.n_layers = u16::max(global_config.n_layers, l);
         }
-        blocks.entry(b.alignment).or_default().push(b);
+        blocks[block.alignment].push(block);
     }
     global_config.n_layers += 1;
     global_config.tray = tray;

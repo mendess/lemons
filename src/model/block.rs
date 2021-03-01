@@ -1,4 +1,5 @@
-use crate::{global_config, color::Color, one_or_more::OneOrMore};
+use crate::{color::Color, global_config, one_or_more::OneOrMore};
+use enum_iterator::IntoEnumIterator;
 use std::{
     io,
     process::{Command, Stdio},
@@ -6,11 +7,22 @@ use std::{
     time::Duration,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, IntoEnumIterator)]
 pub enum Alignment {
     Left,
     Middle,
     Right,
+}
+
+impl Alignment {
+    pub fn to_lemon(self) -> &'static str {
+        use Alignment::*;
+        match self {
+            Left => "%{l}",
+            Middle => "%{c}",
+            Right => "%{r}",
+        }
+    }
 }
 
 #[derive(Debug)]
