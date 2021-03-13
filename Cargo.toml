@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2018"
 
