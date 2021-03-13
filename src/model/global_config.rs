@@ -1,4 +1,4 @@
-use crate::color::Color;
+use crate::{util::number_as_str, color::Color };
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, iter::once, sync::Arc};
@@ -82,11 +82,13 @@ impl<'a> GlobalConfig<'a> {
             .map(|x| x.1)
     }
 
-    pub fn as_env_vars(&self) -> impl Iterator<Item = (&str, &str)> {
+    pub fn as_env_vars(&self, monitor: usize, layer: u16) -> impl Iterator<Item = (&str, &str)> {
         let color = |c: &Option<Color<'a>>| c.map(|c| c.0).unwrap_or("");
         once(("LEMON_BG", color(&self.background)))
             .chain(once(("LEMON_FG", color(&self.foreground))))
             .chain(once(("LEMON_UN", color(&self.underline))))
+            .chain(once(("LEMON_MONITOR", number_as_str(monitor as u8))))
+            .chain(once(("LEMON_LAYER", number_as_str(layer as u8))))
             .chain(self.colors.iter().map(|(_, (k, v))| (k.as_str(), v.0)))
     }
 }

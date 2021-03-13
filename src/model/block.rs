@@ -53,9 +53,7 @@ impl<'a> Content<'a> {
             for m in 0..last_run.len() {
                 match Command::new("sh")
                     .args(&["-c", cmd])
-                    .env("MONITOR", m.to_string())
-                    .envs(global_config::get().as_env_vars())
-                    .env("LAYER", layer.to_string())
+                    .envs(global_config::get().as_env_vars(m, layer))
                     .stdout(Stdio::piped())
                     .stderr(Stdio::inherit())
                     .spawn()

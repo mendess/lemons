@@ -3,6 +3,7 @@ mod event_loop;
 mod model;
 mod one_or_more;
 mod parsing;
+mod util;
 
 use enum_iterator::IntoEnumIterator;
 pub use model::block::{self, Alignment, Block};
