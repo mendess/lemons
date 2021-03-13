@@ -20,6 +20,6 @@ static NUMBERS: [&'static str; u8::MAX as usize + 1] = [
     "249", "250", "251", "252", "253", "254", "255",
 ];
 
-pub const fn number_as_str(n: u8) -> &'static str {
+pub fn number_as_str(n: u8) -> &'static str {
     NUMBERS[n as usize]
 }
