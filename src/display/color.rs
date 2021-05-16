@@ -1,4 +1,4 @@
-use crate::color::Color;
+use crate::model::Color;
 use std::fmt::{self, Display};
 
 impl<'a> Display for Color<'a> {

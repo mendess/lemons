@@ -1,4 +1,5 @@
-use crate::{util::number_as_str, color::Color };
+use super::Color;
+use crate::util::number_as_str;
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, iter::once, sync::Arc};
@@ -14,7 +15,7 @@ pub fn get() -> Arc<GlobalConfig<'static>> {
     GLOBAL_CONFIG.load_full()
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct GlobalConfig<'a> {
     pub base_geometry: Option<&'a str>,
     pub bars_geometries: Vec<String>,
@@ -78,16 +79,16 @@ impl<'a> GlobalConfig<'a> {
     pub fn set_color(&mut self, name: &'a str, value: Color<'a>) -> Option<Color<'a>> {
         let env_var = format!("LEMON_{}", name.to_uppercase());
         self.colors
-            .insert(name, (env_var, value.into()))
+            .insert(name, (env_var, value))
             .map(|x| x.1)
     }
 
-    pub fn as_env_vars(&self, monitor: usize, layer: u16) -> impl Iterator<Item = (&str, &str)> {
+    pub fn as_env_vars(&self, monitor: u8, layer: u16) -> impl Iterator<Item = (&str, &str)> {
         let color = |c: &Option<Color<'a>>| c.map(|c| c.0).unwrap_or("");
         once(("LEMON_BG", color(&self.background)))
             .chain(once(("LEMON_FG", color(&self.foreground))))
             .chain(once(("LEMON_UN", color(&self.underline))))
-            .chain(once(("LEMON_MONITOR", number_as_str(monitor as u8))))
+            .chain(once(("LEMON_MONITOR", number_as_str(monitor))))
             .chain(once(("LEMON_LAYER", number_as_str(layer as u8))))
             .chain(self.colors.iter().map(|(_, (k, v))| (k.as_str(), v.0)))
     }
@@ -103,7 +104,7 @@ fn merge_geometries(geo1: &str, geo2: &str) -> String {
     let parse = |geo: &str| {
         let (geow, geo) = geo.split_at(geo.find('x').unwrap_or(0));
         let geo = geo.get(1..).unwrap_or("");
-        let (geoh, geo) = geo.split_at(geo.find('+').unwrap_or(geo.len()));
+        let (geoh, geo) = geo.split_at(geo.find('+').unwrap_or_else(|| geo.len()));
         let (geox, geoy) = geo
             .get(1..)
             .and_then(|s| s.find('+').map(|i| s.split_at(i)))

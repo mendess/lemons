@@ -1,9 +1,15 @@
 use super::{parser::KeyValues, ParseError, Result};
 use crate::{
-    block::{Alignment, Block, Content, Layer},
-    Color, GlobalConfig,
+    event_loop::Event,
+    global_config,
+    model::{
+        block::{self, *},
+        ActiveMonitors, Alignment, Indexes, Layer,
+    },
+    util::signal::valid_rt_signum,
 };
-use std::{result::Result as StdResult, str::FromStr, time::Duration};
+use std::{convert::TryInto, result::Result as StdResult, str::FromStr, time::Duration};
+use tokio::sync::{broadcast, mpsc};
 
 impl FromStr for Alignment {
     type Err = &'static str;
@@ -30,210 +36,196 @@ impl FromStr for Layer {
     }
 }
 
-impl<'a> Block<'a> {
+enum BlockType {
+    Static,
+    Cmd,
+    Persistent,
+    Native,
+}
+
+// What does a block do
+//
+// - Produces a string after some time
+// - Listens to events
+//   - Force refresh
+//   - Layer changed
+//   - Mouse button clicked
+//
+impl Block<'static> {
     pub fn from_kvs<'parser>(
-        gconfig: &GlobalConfig<'a>,
-        iter: KeyValues<'a, 'parser>,
-        n_monitor: usize,
-    ) -> Result<'a, Self> {
+        n_monitors: u8,
+        indexes: &mut Indexes,
+        iter: KeyValues<'static, 'parser>,
+        broadcast: &broadcast::Sender<Event>,
+        responses: &mpsc::Sender<BlockUpdate>,
+    ) -> Result<'static, Self> {
         let mut block_b = BlockBuilder::default();
+        let mut multi_monitor = false;
+        let mut actions: Actions<'static> = Default::default();
+        let mut signal = Signal::None;
+        // mandatory parameters
+        let mut cmd = None;
+        let mut interval = None;
+        let gc = global_config::get();
         for kvl in iter {
             let (key, value, _) = kvl?;
             eprintln!("{}: {}", key, value);
             let color = || {
-                gconfig
-                    .get_color(value)
-                    .map(|&c| c)
-                    .ok_or(("", ""))
-                    .or_else(|_| {
-                        Color::from_str(value).map_err(|error| ParseError::Color { value, error })
-                    })
+                gc.get_color(value).copied().ok_or(("", "")).or_else(|_| {
+                    value
+                        .try_into()
+                        .map_err(|error| ParseError::Color { value, error })
+                })
             };
             match key {
-                "background" | "bg" => block_b.bg(color()?),
-                "foreground" | "fg" => block_b.fg(color()?),
-                "underline" | "un" => block_b.un(color()?),
-                "font" => block_b
-                    .font(value)
-                    .map_err(|error| ParseError::InvalidFont { value, error })?,
-                "offset" => block_b
-                    .offset(value)
-                    .map_err(|_| ParseError::InvalidOffset(value))?,
-                "left-click" => block_b.action(0, value),
-                "middle-click" => block_b.action(1, value),
-                "right-click" => block_b.action(2, value),
-                "scroll-up" => block_b.action(3, value),
-                "scroll-down" => block_b.action(4, value),
-                "interval" => block_b.interval(Duration::from_secs(
-                    value
-                        .parse::<u64>()
-                        .map_err(|_| ParseError::InvalidDuration(value))?,
-                )),
-                "command" | "cmd" => block_b.content_command(value),
-                "static" => block_b.content_static(value),
-                "persistent" => block_b.content_persistent(value),
-                "alignment" | "align" => block_b.alignment(
-                    value
+                "background" | "bg" => {
+                    block_b.bg(color()?);
+                }
+                "foreground" | "fg" => {
+                    block_b.fg(color()?);
+                }
+                "underline" | "un" => {
+                    block_b.un(color()?);
+                }
+                "font" => {
+                    block_b.font(
+                        value
+                            .try_into()
+                            .map_err(|error| ParseError::InvalidFont { value, error })?,
+                    );
+                }
+                "offset" => {
+                    block_b.offset(
+                        value
+                            .try_into()
+                            .map_err(|_| ParseError::InvalidOffset(value))?,
+                    );
+                }
+                "left-click" => {
+                    actions[0] = Some(value);
+                }
+                "middle-click" => {
+                    actions[1] = Some(value);
+                }
+                "right-click" => {
+                    actions[2] = Some(value);
+                }
+                "scroll-up" => {
+                    actions[3] = Some(value);
+                }
+                "scroll-down" => {
+                    actions[4] = Some(value);
+                }
+                "interval" => {
+                    interval = Some(Duration::from_secs(
+                        value
+                            .parse::<u64>()
+                            .map_err(|_| ParseError::InvalidDuration(value))?,
+                    ));
+                }
+                "command" | "cmd" => {
+                    cmd = Some((value, BlockType::Cmd));
+                }
+                "static" => {
+                    cmd = Some((value, BlockType::Static));
+                }
+                "persistent" => {
+                    cmd = Some((value, BlockType::Persistent));
+                }
+                "native" => {
+                    cmd = Some((value, BlockType::Native));
+                }
+                "alignment" | "align" => {
+                    block_b.alignment(
+                        value
+                            .parse()
+                            .map_err(|_| ParseError::InvalidAlignment(value))?,
+                    );
+                }
+                "signal" => {
+                    signal = value
+                        .parse::<bool>()
+                        .ok()
+                        .map(|_| Signal::Any)
+                        .or_else(|| {
+                            value
+                                .parse()
+                                .ok()
+                                .filter(|s| valid_rt_signum(*s))
+                                .map(Signal::Num)
+                        })
+                        .ok_or(ParseError::InvalidSignal(value))?;
+                }
+                "raw" => {
+                    block_b.raw(
+                        value
+                            .parse()
+                            .map_err(|_| ParseError::InvalidBoolean(value))?,
+                    );
+                }
+                "multi_monitor" => {
+                    multi_monitor = value
                         .parse()
-                        .map_err(|_| ParseError::InvalidAlignment(value))?,
-                ),
-                "signal" => block_b.signal(
-                    value
-                        .parse()
-                        .map_err(|_| ParseError::InvalidBoolean(value))?,
-                ),
-                "raw" => block_b.raw(
-                    value
-                        .parse()
-                        .map_err(|_| ParseError::InvalidBoolean(value))?,
-                ),
-                "multi_monitor" => block_b.multi_monitor(
-                    value
-                        .parse()
-                        .map_err(|_| ParseError::InvalidBoolean(value))?,
-                ),
+                        .map_err(|_| ParseError::InvalidBoolean(value))?;
+                }
                 "layer" => {
-                    block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?)
+                    block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?);
                 }
                 s => {
                     eprintln!("Warning: unrecognised option '{}', skipping", s);
-                    &mut block_b
                 }
             };
         }
-        Ok(block_b
-            .build(n_monitor)
-            .map_err(|e| ParseError::MalformedBlock(e))?)
-    }
-}
-
-#[derive(Default)]
-pub struct BlockBuilder<'a> {
-    bg: Option<Color<'a>>,
-    fg: Option<Color<'a>>,
-    un: Option<Color<'a>>,
-    font: Option<&'a str>,   // 1-infinity index or '-'
-    offset: Option<&'a str>, // u32
-    actions: [Option<&'a str>; 5],
-    content: Option<Content<'a>>,
-    interval: Option<Duration>,
-    alignment: Option<Alignment>,
-    raw: bool,
-    signal: bool,
-    multi_monitor: bool,
-    layer: Layer,
-}
-
-impl<'a> BlockBuilder<'a> {
-    fn raw(&mut self, r: bool) -> &mut Self {
-        self.raw = r;
-        self
-    }
-
-    fn action(&mut self, index: usize, action: &'a str) -> &mut Self {
-        self.actions[index] = Some(action);
-        self
-    }
-
-    fn bg(&mut self, c: Color<'a>) -> &mut Self {
-        self.bg = Some(c);
-        self
-    }
-
-    fn fg(&mut self, c: Color<'a>) -> &mut Self {
-        self.fg = Some(c);
-        self
-    }
-
-    fn un(&mut self, c: Color<'a>) -> &mut Self {
-        self.un = Some(c);
-        self
-    }
-
-    fn font(&mut self, font: &'a str) -> StdResult<&mut Self, &'static str> {
-        if font == "-" || font.parse::<u32>().map_err(|_| "Invalid font")? > 0 {
-            self.font = Some(font);
-            Ok(self)
-        } else {
-            Err("Invalid index")
-        }
-    }
-
-    fn offset(&mut self, o: &'a str) -> StdResult<&mut Self, <u32 as FromStr>::Err> {
-        o.parse::<u32>()?;
-        self.offset = Some(o);
-        Ok(self)
-    }
-
-    fn content_command(&mut self, c: &'a str) -> &mut Self {
-        self.content = Some(Content::Cmd {
-            cmd: c,
-            last_run: Default::default(),
-        });
-        self
-    }
-
-    fn content_static(&mut self, c: &'a str) -> &mut Self {
-        self.content = Some(Content::Static(c));
-        self
-    }
-
-    fn content_persistent(&mut self, c: &'a str) -> &mut Self {
-        self.content = Some(Content::Persistent {
-            cmd: c,
-            last_run: Default::default(),
-        });
-        self
-    }
-
-    fn interval(&mut self, i: Duration) -> &mut Self {
-        self.interval = Some(i);
-        self
-    }
-
-    fn alignment(&mut self, a: Alignment) -> &mut Self {
-        self.alignment = Some(a);
-        self
-    }
-
-    fn signal(&mut self, b: bool) -> &mut Self {
-        self.signal = b;
-        self
-    }
-
-    fn multi_monitor(&mut self, b: bool) -> &mut Self {
-        self.multi_monitor = b;
-        self
-    }
-
-    fn layer(&mut self, layer: Layer) -> &mut Self {
-        self.layer = layer;
-        self
-    }
-
-    pub fn build(self, n_monitor: usize) -> StdResult<Block<'a>, &'static str> {
-        let n_monitor = if self.multi_monitor { n_monitor } else { 1 };
-        if let Some(content) = self.content {
-            if let Some(alignment) = self.alignment {
-                Ok(Block {
-                    bg: self.bg,
-                    fg: self.fg,
-                    un: self.un,
-                    font: self.font,
-                    offset: self.offset,
-                    content: content.replicate_to_mon(n_monitor),
-                    interval: self.interval.map(|i| (i, Default::default())),
-                    actions: self.actions,
-                    alignment,
-                    raw: self.raw,
-                    signal: self.signal,
-                    layer: self.layer,
-                })
+        if let Some((value, kind)) = cmd {
+            let monitors = if multi_monitor {
+                ActiveMonitors::M(n_monitors)
             } else {
-                Err("No alignment defined")
-            }
+                ActiveMonitors::All
+            };
+            let mut block = block_b
+                .build()
+                .map_err(|_| ParseError::MalformedBlock("shit"))?;
+            monitors.resize_one_or_more(&mut block.last_run);
+            block
+                .available_actions
+                .set_all(actions.iter().map(Option::is_some));
+
+            let task: Box<dyn BlockTask> = match kind {
+                BlockType::Static => Box::new(block::constant::Static),
+                BlockType::Cmd if interval.is_some() => {
+                    Box::new(block::timed::Timed(interval.unwrap()))
+                }
+                BlockType::Cmd if signal != Signal::None => {
+                    Box::new(block::timed::Timed(Duration::from_secs(u64::MAX)))
+                }
+                BlockType::Cmd => {
+                    return Err(ParseError::MalformedBlock(
+                        "Missing either signal or interval",
+                    ))
+                }
+                BlockType::Persistent => Box::new(block::persistent::Persistent),
+                BlockType::Native => match block::native::new(value) {
+                    Some(b) => b,
+                    None => return Err(ParseError::InvalidNative(value)),
+                },
+            };
+            task.start(
+                &broadcast,
+                TaskData {
+                    cmd: value,
+                    updates: responses.into(),
+                    actions,
+                    bid: (block.alignment, indexes.get(block.alignment)),
+                    activation_layer: block.layer,
+                    monitors,
+                    signal,
+                },
+            );
+            Ok(block)
         } else {
-            Err("No content defined")
+            Err(ParseError::MalformedBlock(
+                "Missing content (cmd, persistent, native, static)",
+            ))
         }
     }
 }

@@ -1,36 +1,8 @@
-mod display;
-mod event_loop;
-mod model;
-mod one_or_more;
-mod parsing;
-mod util;
-
 use enum_iterator::IntoEnumIterator;
-pub use model::block::{self, Alignment, Block};
-pub use model::color::{self, Color};
-pub use model::global_config::{self, GlobalConfig};
-use parsing::parse;
-use std::{
-    env, fs, io,
-    ops::{Index, IndexMut},
-    path::PathBuf,
-};
+use lemon::{event_loop, model::Alignment, parsing::parse};
+use std::{env, fs, io, path::PathBuf};
 use structopt::StructOpt;
-
-type Config<'a> = [Vec<Block<'a>>; 3];
-
-impl<'a> Index<Alignment> for [Vec<Block<'a>>; 3] {
-    type Output = Vec<Block<'a>>;
-    fn index(&self, a: Alignment) -> &Self::Output {
-        &self[a as usize]
-    }
-}
-
-impl<'a> IndexMut<Alignment> for [Vec<Block<'a>>; 3] {
-    fn index_mut(&mut self, a: Alignment) -> &mut Self::Output {
-        &mut self[a as usize]
-    }
-}
+use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug, Default, StructOpt)]
 #[structopt(name = "lemons")]
@@ -47,7 +19,8 @@ struct Args {
 // Manpage
 // - Sdir
 // - attribute
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let args = Args::from_args();
     let input = args
         .config
@@ -71,18 +44,15 @@ fn main() -> io::Result<()> {
             path.push("lemonrc.md");
             fs::read_to_string(path)
         })
-        .or_else(|_| {
-            Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Couldn't find config file",
-            ))
-        })?;
+        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Couldn't find config file"))?;
     let input = Box::leak(input.into_boxed_str());
-    let blocks = match parse(input, args.bars, args.tray) {
-        Ok(b) => b,
+    let (bc_send, mut bc_recv) = broadcast::channel(100);
+    let (mpsc_send, mpsc_recv) = mpsc::channel(100);
+    let blocks = match parse(input, args.bars, args.tray, &bc_send, &mpsc_send) {
+        Ok(bs) => bs,
         Err(e) => {
             eprintln!("Parse error: {:?}", e);
-            std::process::exit(1);
+            std::process::exit(1)
         }
     };
     println!("Staring blocks");
@@ -92,6 +62,17 @@ fn main() -> io::Result<()> {
             println!("{:?}", b);
         }
     }
-    event_loop::start_event_loop(blocks);
+    // if cfg!(debug_assertions) {
+        tokio::task::spawn({
+            async move {
+                while let Ok(ev) = bc_recv.recv().await {
+                    eprintln!("[{:?}] event {:?} broadcasted", chrono::Utc::now(), ev)
+                }
+            }
+        });
+    // } else {
+    //     drop(bc_recv);
+    // }
+    event_loop::start_event_loop(blocks, bc_send, mpsc_recv).await;
     Ok(())
 }

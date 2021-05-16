@@ -1,3 +1,4 @@
+use std::mem::replace;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug)]
@@ -12,24 +13,32 @@ impl<T: Default> Default for OneOrMore<T> {
     }
 }
 
-impl<T> Index<usize> for OneOrMore<T> {
-    type Output = T;
-    fn index(&self, i: usize) -> &T {
-        match self {
-            Self::One(t) => t,
-            Self::More(m) => &m[i],
+macro_rules! impl_index {
+    ($($t:ty)+) => {
+        $(
+        impl<T> Index<$t> for OneOrMore<T> {
+            type Output = T;
+            fn index(&self, i: $t) -> &Self::Output {
+                match self {
+                    Self::One(t) => t,
+                    Self::More(m) => &m[i as usize],
+                }
+            }
         }
-    }
+
+        impl<T> IndexMut<$t> for OneOrMore<T> {
+            fn index_mut(&mut self, i: $t) -> &mut T {
+                match self {
+                    Self::One(t) => t,
+                    Self::More(m) => &mut m[i as usize],
+                }
+            }
+        }
+        )*
+    };
 }
 
-impl<T> IndexMut<usize> for OneOrMore<T> {
-    fn index_mut(&mut self, i: usize) -> &mut T {
-        match self {
-            Self::One(t) => t,
-            Self::More(m) => &mut m[i],
-        }
-    }
-}
+impl_index!(u8 u16 u32 u64 usize);
 
 impl<T> OneOrMore<T> {
     pub fn len(&self) -> usize {
@@ -51,12 +60,19 @@ impl<T> OneOrMore<T> {
         F: FnMut() -> T,
     {
         if new_len > 1 {
-            let mut to_resize = match std::mem::replace(self, OneOrMore::More(vec![])) {
+            let mut to_resize = match replace(self, OneOrMore::More(vec![])) {
                 Self::One(o) => vec![o],
                 Self::More(m) => m,
             };
             to_resize.resize_with(new_len, f);
             *self = Self::More(to_resize);
+        }
+    }
+
+    pub fn push(&mut self, t: T) {
+        match replace(self, OneOrMore::More(vec![])) {
+            OneOrMore::One(o) => *self = OneOrMore::More(vec![o, t]),
+            OneOrMore::More(mut v) => v.push(t),
         }
     }
 }

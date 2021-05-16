@@ -1,18 +1,18 @@
 use super::Lemonbar;
-use crate::block::{Block, Content};
+use crate::{event_loop::action_task::Action, model::block::Block };
 use std::fmt::{self, Display};
 
 #[derive(Debug)]
-pub struct DisplayBlock<'a, 'b: 'a>(pub &'b Block<'a>, pub usize);
+pub struct DisplayBlock<'a, 'b: 'a>(pub &'b Block<'a>, pub usize, pub u8);
 
 impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let DisplayBlock(b, mon) = self;
+        let DisplayBlock(b, index, mon) = self;
         if b.raw {
-            return write!(f, "{}", DisplayContent(&b.content, *mon));
+            return write!(f, "{}", b.last_run[*mon].trim_end_matches('\n'));
         }
         if let Some(x) = &b.offset {
-            f.lemon('O', x)?;
+            f.lemon('O', x.0)?;
         }
         if let Some(x) = &b.bg {
             f.lemon('B', x)?;
@@ -25,51 +25,36 @@ impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
             f.write_str("%{+u}")?;
         }
         if let Some(x) = &b.font {
-            f.lemon('T', x)?;
+            f.lemon('T', x.0)?;
         }
         let mut num_cmds = 0;
-        for (i, a) in b
-            .actions
-            .iter()
-            .enumerate()
-            .filter_map(|(i, o)| o.map(|a| (i, a)))
-        {
-            write!(f, "%{{A{index}:{cmd}:}}", index = i + 1, cmd = a)?;
+        for i in b.available_actions.iter() {
+            write!(
+                f,
+                "%{{A{mouse}:{action}:}}",
+                mouse = i + 1,
+                action = Action::new(b.alignment, *index, *mon, i),
+            )?;
             num_cmds += 1;
         }
-        write!(f, "{} ", DisplayContent(&b.content, *mon))?;
+        write!(f, "{} ", b.last_run[*mon].trim_end_matches('\n'))?;
         (0..num_cmds).try_for_each(|_| f.write_str("%{A}"))?;
-        if let Some(_) = &b.font {
+        if b.font.is_some() {
             f.lemon('T', "-")?;
         }
-        if let Some(_) = &b.un {
+        if b.un.is_some() {
             f.lemon('U', "-")?;
             f.write_str("%{-u}")?;
         }
-        if let Some(_) = &b.fg {
+        if b.fg.is_some() {
             f.lemon('F', "-")?;
         }
-        if let Some(_) = &b.bg {
+        if b.bg.is_some() {
             f.lemon('B', "-")?;
         }
-        if let Some(_) = &b.offset {
+        if b.offset.is_some() {
             f.lemon('O', "0")?;
         }
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct DisplayContent<'a, 'b: 'a>(&'b Content<'a>, usize);
-
-impl<'a, 'b> Display for DisplayContent<'a, 'b> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            Content::Static(s) => write!(f, "{}", s),
-            Content::Cmd { last_run, .. } => write!(f, "{}", last_run[self.1].read().unwrap()),
-            Content::Persistent { last_run, .. } => {
-                write!(f, "{}", last_run[self.1].read().unwrap())
-            }
-        }
     }
 }

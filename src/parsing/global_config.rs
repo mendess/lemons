@@ -1,5 +1,6 @@
 use super::{parser::KeyValues, ParseError, Result};
-use crate::{Color, GlobalConfig};
+use crate::global_config::GlobalConfig;
+use std::convert::TryInto;
 
 impl<'a> GlobalConfig<'a> {
     pub fn from_kvs(iter: KeyValues<'a, '_>) -> Result<'a, Self> {
@@ -10,8 +11,11 @@ impl<'a> GlobalConfig<'a> {
             in_colors = in_colors && level > 1;
             (1..level).for_each(|_| eprint!(" "));
             eprintln!("{}: {}", key, value);
-            let color =
-                || Color::from_str(value).map_err(|error| ParseError::Color { value, error });
+            let color = || {
+                value
+                    .try_into()
+                    .map_err(|error| ParseError::Color { value, error })
+            };
             match key {
                 "background" | "bg" | "B" => global_config.background = Some(color()?),
                 "foreground" | "fg" | "F" => global_config.foreground = Some(color()?),
@@ -40,7 +44,7 @@ impl<'a> GlobalConfig<'a> {
                     )
                 }
                 "separator" => global_config.separator = Some(value),
-                "geometry" | "g" => global_config.base_geometry = Some(value.into()),
+                "geometry" | "g" => global_config.base_geometry = Some(value),
                 "name" | "n" => global_config.name = Some(value),
                 "colors" | "colours" | "c" => in_colors = true,
                 key if level == 2 && in_colors => {

@@ -1,7 +1,10 @@
-use crate::color::Color;
+use crate::model::color::Color;
+use std::convert::TryFrom;
 
-impl<'a> Color<'a> {
-    pub fn from_str(s: &'a str) -> Result<Self, &'static str> {
+impl<'a> TryFrom<&'a str> for Color<'a> {
+    type Error = &'static str;
+
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         if !s.starts_with('#') {
             return Err("Invalid colour");
         }

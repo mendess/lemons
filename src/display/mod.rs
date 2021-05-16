@@ -1,6 +1,6 @@
 mod block;
 mod color;
-pub use block::{DisplayBlock, DisplayContent};
+pub use block::DisplayBlock;
 
 use std::fmt::{self, Display, Write};
 
