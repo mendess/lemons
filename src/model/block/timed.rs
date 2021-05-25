@@ -77,10 +77,8 @@ impl super::BlockTask for Timed {
                         continue;
                     }
                     Ok(Event::Signal) if signal.is_some() => {}
-                    Ok(Event::NewLayer) => {},
-                    Ok(Event::MouseClicked(..))
-                    | Ok(Event::Signal)
-                    | Ok(Event::Refresh) => continue,
+                    Ok(Event::NewLayer) | Ok(Event::Refresh) => {}
+                    Ok(Event::MouseClicked(..)) | Ok(Event::Signal) => continue,
                     Err(_) => return,
                 }
                 if update_blocks(cmd, activation_layer, bid, monitors, &updates)
