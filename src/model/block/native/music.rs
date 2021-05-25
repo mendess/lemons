@@ -185,12 +185,13 @@ impl Title {
 
 impl Display for Title {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const TRUNC_LEN: usize = 22;
         fn trunc(s: &str) -> (&str, &'static str) {
             let layer = current_layer();
-            if layer == 0 || s.len() <= 22 {
+            if layer == 0 || s.len() <= TRUNC_LEN {
                 (&s[..], "")
             } else {
-                (&s[..22], "...")
+                (&s[..TRUNC_LEN], "...")
             }
         }
         match self {
