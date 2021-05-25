@@ -62,7 +62,7 @@ async fn main() -> io::Result<()> {
             println!("{:?}", b);
         }
     }
-    // if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) {
         tokio::task::spawn({
             async move {
                 while let Ok(ev) = bc_recv.recv().await {
@@ -70,9 +70,9 @@ async fn main() -> io::Result<()> {
                 }
             }
         });
-    // } else {
-    //     drop(bc_recv);
-    // }
+    } else {
+        drop(bc_recv);
+    }
     event_loop::start_event_loop(blocks, bc_send, mpsc_recv).await;
     Ok(())
 }
