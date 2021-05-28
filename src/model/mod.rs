@@ -32,7 +32,7 @@ impl<'a> IndexMut<Alignment> for Config<'a> {
 impl<'a> Config<'a> {
     pub fn update(&mut self, update: block::BlockUpdate) {
         let (alignment, index, monitor) = update.id();
-        self[alignment][index].last_run[monitor] = update.into_text()
+        self[alignment][index].last_run[monitor].clone_from(&update.into_text())
     }
 }
 

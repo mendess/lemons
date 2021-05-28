@@ -45,8 +45,9 @@ impl BlockTask for Music {
     ) {
         let (mut tx, rx) = mpsc::channel(10);
         tokio::spawn(event_loop(events.subscribe(), bid, updates, rx));
-        if let Signal::Num(n) = signal {
-            tokio::spawn(async move {
+        tokio::spawn(async move {
+            let _ = tx.send(()).await;
+            if let Signal::Num(n) = signal {
                 let mut signals = match SignalsInfo::new(once(sig_rt_min() + n)) {
                     Ok(s) => s,
                     Err(e) => {
@@ -60,8 +61,8 @@ impl BlockTask for Music {
                 tokio::pin!(sends);
                 while let Some(Ok(_)) = sends.next().await {}
                 eprintln!("music native terminating");
-            });
-        }
+            }
+        });
     }
 }
 

@@ -108,12 +108,12 @@ pub async fn start_event_loop(
     let mut line = String::new();
     while let Some(update) = updates.recv().await {
         let (_, index, monitor) = update.id();
-        let up = update.as_str().to_owned();
+        // let up = update.as_str().to_owned();
         config.update(update);
         match lemon_inputs.get_mut(monitor as usize) {
             Some(input) => {
                 build_line(&config, index, monitor, &mut line);
-                debug(&line, &up);
+                // debug(&line, &up);
                 if let Err(e) = input.write_all(line.as_bytes()).await {
                     eprintln!("Couldn't talk to lemon bar :( {:?}", e);
                 }
@@ -121,7 +121,7 @@ pub async fn start_event_loop(
             None => {
                 for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
                     build_line(&config, index, monitor as _, &mut line);
-                    debug(&line, &up);
+                    // debug(&line, &up);
                     if let Err(e) = input.write_all(line.as_bytes()).await {
                         eprintln!("Couldn't talk to lemon bar :( {:?}", e);
                     }
