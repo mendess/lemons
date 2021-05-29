@@ -51,16 +51,13 @@ impl BlockTask for Music {
                 let mut signals = match SignalsInfo::new(once(sig_rt_min() + n)) {
                     Ok(s) => s,
                     Err(e) => {
-                        return eprintln!(
-                            "= = = = = = Failed to start signal task for native music {}",
-                            e
-                        );
+                        return log::error!("Failed to start signal task for native music {}", e);
                     }
                 };
                 let mut sends = signals.then(|_| tx.send(()));
                 tokio::pin!(sends);
                 while let Some(Ok(_)) = sends.next().await {}
-                eprintln!("music native terminating");
+                log::info!("music native terminating");
             }
         });
     }
@@ -90,7 +87,7 @@ async fn event_loop(
     updates: UpdateChannel,
     mut ch: mpsc::Receiver<()>,
 ) -> io::Result<()> {
-    let mut bar = BarData::fetch().await.ok();
+    let mut bar = None;
     while let Ok(e) = tokio::select! {
         e = events.recv() => e,
         Some(_) = ch.recv() => Ok(Event::Signal)
@@ -288,7 +285,7 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
             match sock.try_read_buf(&mut buf) {
                 Ok(_) => break 'readloop,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    eprintln!("false positive read");
+                    log::warn!("false positive read");
                     break;
                 }
                 Err(e) => return Err(e),
@@ -297,10 +294,12 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
     }
 
     if let Some(i) = buf.iter().position(|b| *b != 0) {
-        eprintln!(
+        log::debug!(
             "{} => {}",
             p,
-            std::str::from_utf8(&buf).unwrap_or("some error happened")
+            std::str::from_utf8(&buf)
+                .unwrap_or("some error happened")
+                .trim()
         );
         match buf[i..]
             .split(|&b| b == b'\n')

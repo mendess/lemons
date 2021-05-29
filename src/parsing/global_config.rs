@@ -9,8 +9,12 @@ impl<'a> GlobalConfig<'a> {
         for kvl in iter {
             let (key, value, level) = kvl?;
             in_colors = in_colors && level > 1;
-            (1..level).for_each(|_| eprint!(" "));
-            eprintln!("{}: {}", key, value);
+            log::trace!(
+                "{}{}: {}",
+                " ".repeat(level.saturating_sub(1) as _),
+                key,
+                value
+            );
             let color = || {
                 value
                     .try_into()
@@ -51,7 +55,7 @@ impl<'a> GlobalConfig<'a> {
                     global_config.set_color(key, color()?);
                 }
                 s => {
-                    eprintln!("Warning: unrecognised option '{}', skipping", s);
+                    log::warn!("Warning: unrecognised option '{}', skipping", s);
                 }
             };
         }

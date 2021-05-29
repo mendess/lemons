@@ -37,7 +37,7 @@ impl super::BlockTask for Timed {
                     let mut signals = match signal_stream(SignalKind::from_raw(sig_rt_min() + n)) {
                         Ok(s) => s,
                         Err(e) => {
-                            return eprintln!(
+                            return log::error!(
                                 "Failed to start signal task for '{}' because: {:?}",
                                 cmd, e
                             );

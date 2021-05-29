@@ -53,7 +53,7 @@ pub fn trayer(global_config: &GlobalConfig, ch: mpsc::Sender<Event>) -> JoinHand
             .spawn()
             .and_then(|mut ch| ch.wait());
         let mut trayer = match trayer.spawn() {
-            Err(e) => return eprintln!("Couldn't start trayer: {}", e),
+            Err(e) => return log::error!("Couldn't start trayer: {}", e),
             Ok(t) => t,
         };
         thread::sleep(Duration::from_millis(500));
@@ -71,11 +71,11 @@ pub fn trayer(global_config: &GlobalConfig, ch: mpsc::Sender<Event>) -> JoinHand
             .stdout(Stdio::piped())
             .spawn();
         let mut xprop = match xprop {
-            Err(e) => return eprintln!("Couldn't spy tray size: {:?}", e),
+            Err(e) => return log::error!("Couldn't spy tray size: {:?}", e),
             Ok(x) => x,
         };
         let xprop_output = match xprop.stdout.take() {
-            None => return eprintln!("Couldn't read tray size spy output"),
+            None => return log::error!("Couldn't read tray size spy output"),
             Some(o) => o,
         };
         let _ = BufReader::new(xprop_output)
@@ -86,7 +86,7 @@ pub fn trayer(global_config: &GlobalConfig, ch: mpsc::Sender<Event>) -> JoinHand
                     .nth(1)
                     .and_then(|x| {
                         x.parse()
-                            .map_err(|_| eprintln!("Failed to parse size: '{}' from '{}'", x, l))
+                            .map_err(|_| log::error!("Failed to parse size: '{}' from '{}'", x, l))
                             .ok()
                     })
                     .and_then(|o: u32| ch.send(Event::TrayResize(o + 5)).ok())

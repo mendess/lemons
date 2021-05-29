@@ -30,14 +30,14 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
                             Ok(a) => a,
                             Err(e) => {
                                 if cfg!(debug_assertions) {
-                                    eprintln!("Failed to parse buf '{}' because: {}", buf, e);
+                                    log::error!("Failed to parse buf '{}' because: {}", buf, e);
                                 }
                                 let _ = cmd::run_cmd(&buf, 0, current_layer()).await;
                                 continue;
                             }
                         },
                         Err(e) => {
-                            eprintln!("Error reading from lemonbar: {:?}", e);
+                            log::error!("Error reading from lemonbar: {:?}", e);
                             continue;
                         }
                     };

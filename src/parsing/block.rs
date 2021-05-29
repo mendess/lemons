@@ -69,7 +69,7 @@ impl Block<'static> {
         let gc = global_config::get();
         for kvl in iter {
             let (key, value, _) = kvl?;
-            eprintln!("{}: {}", key, value);
+            log::trace!("{}: {}", key, value);
             let color = || {
                 gc.get_color(value).copied().ok_or(("", "")).or_else(|_| {
                     value
@@ -172,7 +172,7 @@ impl Block<'static> {
                     block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?);
                 }
                 s => {
-                    eprintln!("Warning: unrecognised option '{}', skipping", s);
+                    log::warn!("unrecognised option '{}', skipping", s);
                 }
             };
         }
@@ -209,13 +209,15 @@ impl Block<'static> {
                     None => return Err(ParseError::InvalidNative(value)),
                 },
             };
+            let bid = (block.alignment, indexes.get(block.alignment));
+            log::info!("Starting task {:?}({}) {:?}", task, value, bid);
             task.start(
                 &broadcast,
                 TaskData {
                     cmd: value,
                     updates: responses.into(),
                     actions,
-                    bid: (block.alignment, indexes.get(block.alignment)),
+                    bid,
                     activation_layer: block.layer,
                     monitors,
                     signal,

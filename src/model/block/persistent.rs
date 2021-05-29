@@ -30,7 +30,7 @@ impl super::BlockTask for Persistent {
                     let mut output = match run_cmd(cmd, mon).await {
                         Ok(o) => o,
                         Err(e) => {
-                            return eprintln!(
+                            return log::error!(
                                 "Failed to start persistent command: '{}', because '{:?}'",
                                 cmd, e
                             )
