@@ -18,9 +18,10 @@ use tokio::{
     io::{self, AsyncWriteExt},
     net::UnixStream,
     sync::{broadcast, mpsc, Mutex},
+    time
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Update {
     Full,
     Volume,
@@ -92,7 +93,7 @@ async fn event_loop(
         e = events.recv() => e,
         Some(_) = ch.recv() => Ok(Event::Signal)
     } {
-        match e {
+        let up = match e {
             Event::MouseClicked(id, _, button) if id == bid => {
                 let mut sock = socket().await?;
                 let (msg, up) = match button {
@@ -103,16 +104,23 @@ async fn event_loop(
                     MouseButton::Right => ("playlist-next\n", Update::Title),
                 };
                 sock.write_all(msg.as_bytes()).await?;
-                update_bar(&mut bar, up).await;
+                if up == Update::Title {
+                    // if we don't do this we'll have a useless update that will almost always be
+                    // wrong since mpv still takes a bit of time to load the song
+                    continue
+                }
+                up
             }
-            Event::MouseClicked(..) => (),
+            Event::MouseClicked(..) => continue,
             Event::Refresh | Event::Signal => {
-                update_bar(&mut bar, Update::Full).await;
+                Update::Full
             }
             Event::NewLayer => {
-                update_bar(&mut bar, Update::Title).await;
+                Update::Title
             }
-        }
+        };
+        time::sleep(Duration::from_millis(1)).await;
+        update_bar(&mut bar, up).await;
         if let Some(b) = bar.as_ref().map(ToString::to_string) {
             if updates.send((b, bid, u8::MAX).into()).await.is_err() {
                 break;
