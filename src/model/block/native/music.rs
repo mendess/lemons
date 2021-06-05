@@ -121,10 +121,9 @@ async fn event_loop(
         };
         time::sleep(Duration::from_millis(1)).await;
         update_bar(&mut bar, up).await;
-        if let Some(b) = bar.as_ref().map(ToString::to_string) {
-            if updates.send((b, bid, u8::MAX).into()).await.is_err() {
-                break;
-            }
+        let b = bar.as_ref().map(ToString::to_string).unwrap_or_default();
+        if updates.send((b, bid, u8::MAX).into()).await.is_err() {
+            break;
         }
     }
     Ok(())
@@ -153,6 +152,7 @@ async fn socket() -> io::Result<UnixStream> {
         available_sockets.sort();
         for s in available_sockets.into_iter().rev() {
             if let Ok(sock) = UnixStream::connect(&s).await {
+                log::trace!("Opening a new socket {}", s.display());
                 current.0 = s;
                 current.1 = Instant::now();
                 return Ok(sock);
@@ -278,8 +278,11 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
         error: String,
     }
 
+    log::trace!("Opening socket");
     let mut sock = socket().await?;
+    log::trace!("Checking if socket is writable");
     sock.writable().await?;
+    log::trace!("Writing to the socket property '{}'", p);
     sock.write_all(&serde_json::to_vec(
         &serde_json::json!({ "command": [ "get_property", p ] }),
     )?)
@@ -288,8 +291,10 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
 
     let mut buf = Vec::with_capacity(1024);
     'readloop: loop {
+        log::trace!("Waiting for the socket to become readable");
         sock.readable().await?;
         loop {
+            log::trace!("Trying to read from socket");
             match sock.try_read_buf(&mut buf) {
                 Ok(_) => break 'readloop,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
