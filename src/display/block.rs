@@ -1,6 +1,9 @@
 use super::Lemonbar;
-use crate::{event_loop::action_task::Action, model::block::Block };
-use std::fmt::{self, Display};
+use crate::{event_loop::action_task::Action, model::block::Block};
+use std::{
+    borrow::Cow,
+    fmt::{self, Display},
+};
 
 #[derive(Debug)]
 pub struct DisplayBlock<'a, 'b: 'a>(pub &'b Block<'a>, pub usize, pub u8);
@@ -37,7 +40,13 @@ impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
             )?;
             num_cmds += 1;
         }
-        write!(f, "{} ", b.last_run[*mon].trim_end_matches('\n'))?;
+        let body = b.last_run[*mon].trim_end_matches('\n');
+        let body = if body.contains('%') {
+            Cow::Owned(body.replace('%', "%%"))
+        } else {
+            Cow::Borrowed(body)
+        };
+        write!(f, "{}", body)?;
         (0..num_cmds).try_for_each(|_| f.write_str("%{A}"))?;
         if b.font.is_some() {
             f.lemon('T', "-")?;

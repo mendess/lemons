@@ -137,6 +137,7 @@ pub async fn start_event_loop(
 fn build_line(config: &Config, monitor: u8, line: &mut String) {
     line.clear();
     let global_config = global_config::get();
+    let current_layer = current_layer();
     Alignment::into_enum_iter()
         .map(|a| (a, &config[a]))
         .filter(|(_, c)| !c.is_empty())
@@ -146,7 +147,7 @@ fn build_line(config: &Config, monitor: u8, line: &mut String) {
                 .iter()
                 .enumerate()
                 .filter(|(_, b)| !b.last_run[monitor].is_empty())
-                .filter(|(_, b)| b.layer == current_layer())
+                .filter(|(_, b)| b.layer == current_layer)
                 .map(|(index, b)| DisplayBlock(b, index, monitor))
                 .zip(successors(Some(None), |_| Some(global_config.separator)))
                 .for_each(|(b, s)| {
