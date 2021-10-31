@@ -11,8 +11,14 @@ pub struct DisplayBlock<'a, 'b: 'a>(pub &'b Block<'a>, pub usize, pub u8);
 impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let DisplayBlock(b, index, mon) = self;
+        let body = b.last_run[*mon].trim_end_matches('\n');
         if b.raw {
-            return write!(f, "{}", b.last_run[*mon].trim_end_matches('\n'));
+            let body = if body.ends_with('%') {
+                Cow::Owned(format!("{}%", body))
+            } else {
+                Cow::Borrowed(body)
+            };
+            return write!(f, "{}", body);
         }
         if let Some(x) = &b.offset {
             f.lemon('O', x.0)?;
@@ -40,7 +46,6 @@ impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
             )?;
             num_cmds += 1;
         }
-        let body = b.last_run[*mon].trim_end_matches('\n');
         let body = if body.contains('%') {
             Cow::Owned(body.replace('%', "%%"))
         } else {
