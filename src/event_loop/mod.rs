@@ -96,7 +96,7 @@ pub async fn start_event_loop(
         global_config
             .bars_geometries
             .iter()
-            .map(|g| global_config.to_arg_list(Some(&g)))
+            .map(|g| global_config.to_arg_list(Some(g)))
             .map(spawn_bar)
             .unzip_n()
     };

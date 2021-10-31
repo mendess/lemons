@@ -212,7 +212,7 @@ impl Block<'static> {
             let bid = (block.alignment, indexes.get(block.alignment));
             log::info!("Starting task {:?}({}) {:?}", task, value, bid);
             task.start(
-                &broadcast,
+                broadcast,
                 TaskData {
                     cmd: value,
                     updates: responses.into(),
@@ -223,6 +223,9 @@ impl Block<'static> {
                     signal,
                 },
             );
+            if value == "m" {
+                dbg!(&block);
+            }
             Ok(block)
         } else {
             Err(ParseError::MalformedBlock(
