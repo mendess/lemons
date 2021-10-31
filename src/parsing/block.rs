@@ -223,9 +223,6 @@ impl Block<'static> {
                     signal,
                 },
             );
-            if value == "m" {
-                dbg!(&block);
-            }
             Ok(block)
         } else {
             Err(ParseError::MalformedBlock(

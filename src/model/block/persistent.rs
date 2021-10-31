@@ -32,7 +32,8 @@ impl super::BlockTask for Persistent {
                         Err(e) => {
                             return log::error!(
                                 "Failed to start persistent command: '{}', because '{:?}'",
-                                cmd, e
+                                cmd,
+                                e
                             )
                         }
                     };

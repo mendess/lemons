@@ -39,7 +39,6 @@ impl<'a, 'b> Display for DisplayBlock<'a, 'b> {
             num_cmds += 1;
         }
         let body = if b.raw {
-            log::info!("Processing raw block");
             if body.ends_with('%') {
                 Cow::Owned(format!("{}%", body))
             } else {

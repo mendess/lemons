@@ -164,5 +164,10 @@ fn build_line(config: &Config, monitor: u8, line: &mut String) {
 #[inline(always)]
 pub fn debug(line: &str, up: &str, bid: (Alignment, usize)) {
     log::trace!("[{:?}] {}", chrono::Utc::now(), line);
-    log::debug!("[{:?}] bar update '{}' from {:?}", chrono::Utc::now(), up, bid);
+    log::debug!(
+        "[{:?}] bar update '{}' from {:?}",
+        chrono::Utc::now(),
+        up,
+        bid
+    );
 }

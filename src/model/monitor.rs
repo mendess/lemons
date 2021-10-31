@@ -29,7 +29,7 @@ impl ActiveMonitors {
     pub fn len(&self) -> usize {
         match self {
             ActiveMonitors::All => 1,
-            ActiveMonitors::M(m) => *m as _
+            ActiveMonitors::M(m) => *m as _,
         }
     }
 }

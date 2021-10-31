@@ -55,13 +55,7 @@ pub fn parse(
     let mut indexes = Indexes::default();
     crate::global_config::set(global_config.clone());
     while let Some((_, kvs)) = parser.next_section()? {
-        let block = Block::from_kvs(
-            bars.len() as u8,
-            &mut indexes,
-            kvs,
-            broadcast,
-            responses,
-        )?;
+        let block = Block::from_kvs(bars.len() as u8, &mut indexes, kvs, broadcast, responses)?;
         if let Layer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);
         }

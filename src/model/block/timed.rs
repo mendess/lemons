@@ -39,7 +39,8 @@ impl super::BlockTask for Timed {
                         Err(e) => {
                             return log::error!(
                                 "Failed to start signal task for '{}' because: {:?}",
-                                cmd, e
+                                cmd,
+                                e
                             );
                         }
                     };

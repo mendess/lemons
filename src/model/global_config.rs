@@ -78,9 +78,7 @@ impl<'a> GlobalConfig<'a> {
 
     pub fn set_color(&mut self, name: &'a str, value: Color<'a>) -> Option<Color<'a>> {
         let env_var = format!("LEMON_{}", name.to_uppercase());
-        self.colors
-            .insert(name, (env_var, value))
-            .map(|x| x.1)
+        self.colors.insert(name, (env_var, value)).map(|x| x.1)
     }
 
     pub fn as_env_vars(&self, monitor: u8, layer: u16) -> impl Iterator<Item = (&str, &str)> {

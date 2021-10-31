@@ -1,8 +1,8 @@
 pub mod constant;
 pub mod native;
 pub mod persistent;
-pub mod timed;
 pub mod signal_task;
+pub mod timed;
 
 use super::{ActiveMonitors, Alignment, Color, Layer};
 use crate::{
