@@ -18,7 +18,7 @@ use tokio::{
     io::{self, AsyncWriteExt},
     net::UnixStream,
     sync::{broadcast, mpsc, Mutex},
-    time
+    time,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +68,10 @@ async fn update_bar(bar: &mut Option<BarData>, how: Update) {
     match bar {
         Some(b) => {
             if match how {
-                Update::Full => Ok(*bar = BarData::fetch().await.ok()),
+                Update::Full => {
+                    *bar = BarData::fetch().await.ok();
+                    Ok(())
+                }
                 Update::Volume => b.update_volume().await,
                 Update::Title => b.update_title().await,
                 Update::State => b.update_paused().await,
@@ -107,17 +110,13 @@ async fn event_loop(
                 if up == Update::Title {
                     // if we don't do this we'll have a useless update that will almost always be
                     // wrong since mpv still takes a bit of time to load the song
-                    continue
+                    continue;
                 }
                 up
             }
             Event::MouseClicked(..) => continue,
-            Event::Refresh | Event::Signal => {
-                Update::Full
-            }
-            Event::NewLayer => {
-                Update::Title
-            }
+            Event::Refresh | Event::Signal => Update::Full,
+            Event::NewLayer => Update::Title,
         };
         time::sleep(Duration::from_millis(1)).await;
         update_bar(&mut bar, up).await;
@@ -138,13 +137,19 @@ async fn socket() -> io::Result<UnixStream> {
             PathBuf::new(),
             Instant::now()
                 .checked_sub(INVALID_THREASHOLD)
-                .unwrap_or_else(|| Instant::now()),
+                .unwrap_or_else(Instant::now),
         ))
+    });
+    static SOCKET_GLOB: Lazy<String> = Lazy::new(|| {
+        let mut glob = whoami::username();
+        glob.insert_str(0, "/tmp/");
+        glob.push_str("/.mpvsocket*");
+        glob
     });
 
     let mut current = CURRENT.lock().await;
     if current.1.elapsed() >= INVALID_THREASHOLD {
-        let mut available_sockets: Vec<_> = glob::glob("/tmp/.mpvsocket*")
+        let mut available_sockets: Vec<_> = glob::glob(&*SOCKET_GLOB)
             .unwrap()
             .filter_map(Result::ok)
             .filter(|x| x.to_str().map(|x| SOCKET.is_match(x)).unwrap_or(false))
@@ -195,20 +200,20 @@ impl Display for Title {
         fn trunc(s: &str) -> (&str, &'static str) {
             let layer = current_layer();
             if layer == 0 || s.len() <= TRUNC_LEN {
-                (&s[..], "")
+                (s, "")
             } else {
                 (&s[..TRUNC_LEN], "...")
             }
         }
         match self {
             Title::Simple(s) => {
-                let (title, elipsis) = trunc(&s);
+                let (title, elipsis) = trunc(s);
                 write!(f, "{}{}", title, elipsis)
             }
             Title::Complex { video, chapter } => {
                 let g = crate::global_config::get();
-                let (v, el) = trunc(&video);
-                let (c, el1) = trunc(&chapter);
+                let (v, el) = trunc(video);
+                let (c, el1) = trunc(chapter);
                 write!(
                     f,
                     "%{{F{blue}}}Video:%{{F-}} {}{} %{{F{blue}}}Song:%{{F-}} {}{}",
@@ -243,19 +248,22 @@ impl BarData {
     }
 
     async fn update_title(&mut self) -> io::Result<()> {
-        Ok(self.title = Title::fetch().await?)
+        self.title = Title::fetch().await?;
+        Ok(())
     }
 
     async fn update_paused(&mut self) -> io::Result<()> {
-        Ok(self.paused = get_property("pause")
+        self.paused = get_property("pause")
             .await?
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        Ok(())
     }
 
     async fn update_volume(&mut self) -> io::Result<()> {
-        Ok(self.volume = get_property("volume")
+        self.volume = get_property("volume")
             .await?
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        Ok(())
     }
 }
 
@@ -299,7 +307,6 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
                 Ok(_) => break 'readloop,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     log::warn!("false positive read");
-                    break;
                 }
                 Err(e) => return Err(e),
             };

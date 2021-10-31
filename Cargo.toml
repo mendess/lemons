@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "2.1.6"
+version = "3.0.0"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2018"
 default-run = "lemon"
@@ -25,6 +25,7 @@ signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 signal-hook = "0.3"
 log = "0.4"
 env_logger = "0.8"
+whoami = "1.1.5"
 
 [dependencies.tokio]
 version = "1"
