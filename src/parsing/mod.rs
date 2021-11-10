@@ -30,7 +30,7 @@ pub enum ParseError<'a> {
     InvalidLayer(&'a str),
     InvalidSignal(&'a str),
     InvalidNative(&'a str),
-    MalformedBlock(&'static str),
+    MalformedBlock(String),
     MissingAlignment,
     MissingContent,
 }

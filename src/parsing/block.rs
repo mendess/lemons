@@ -184,7 +184,7 @@ impl Block<'static> {
             };
             let mut block = block_b
                 .build()
-                .map_err(|_| ParseError::MalformedBlock("shit"))?;
+                .map_err(|e| ParseError::MalformedBlock(e.to_string()))?;
             monitors.resize_one_or_more(&mut block.last_run);
             block
                 .available_actions
@@ -200,7 +200,7 @@ impl Block<'static> {
                 }
                 BlockType::Cmd => {
                     return Err(ParseError::MalformedBlock(
-                        "Missing either signal or interval",
+                        "Missing either signal or interval".into(),
                     ))
                 }
                 BlockType::Persistent => Box::new(block::persistent::Persistent),
@@ -226,7 +226,7 @@ impl Block<'static> {
             Ok(block)
         } else {
             Err(ParseError::MalformedBlock(
-                "Missing content (cmd, persistent, native, static)",
+                "Missing content (cmd, persistent, native, static)".into(),
             ))
         }
     }
