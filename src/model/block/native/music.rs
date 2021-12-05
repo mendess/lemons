@@ -33,7 +33,6 @@ enum Update {
 pub struct Music;
 
 impl BlockTask for Music {
-    #[allow(unused_variables, unused_mut)]
     fn start(
         &self,
         events: &broadcast::Sender<Event>,
@@ -44,18 +43,18 @@ impl BlockTask for Music {
             ..
         }: TaskData,
     ) {
-        let (mut tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel(10);
         tokio::spawn(event_loop(events.subscribe(), bid, updates, rx));
         tokio::spawn(async move {
             let _ = tx.send(()).await;
             if let Signal::Num(n) = signal {
-                let mut signals = match SignalsInfo::new(once(sig_rt_min() + n)) {
+                let signals = match SignalsInfo::new(once(sig_rt_min() + n)) {
                     Ok(s) => s,
                     Err(e) => {
                         return log::error!("Failed to start signal task for native music {}", e);
                     }
                 };
-                let mut sends = signals.then(|_| tx.send(()));
+                let sends = signals.then(|_| tx.send(()));
                 tokio::pin!(sends);
                 while let Some(Ok(_)) = sends.next().await {}
                 log::info!("music native terminating");
