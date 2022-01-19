@@ -7,7 +7,7 @@ use futures::stream::StreamExt;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{de::DeserializeOwned, Deserialize};
-use signal_hook_tokio::SignalsInfo;
+use signal_hook_tokio::Signals;
 use std::{
     fmt::{self, Display},
     iter::once,
@@ -48,7 +48,7 @@ impl BlockTask for Music {
         tokio::spawn(async move {
             let _ = tx.send(()).await;
             if let Signal::Num(n) = signal {
-                let signals = match SignalsInfo::new(once(sig_rt_min() + n)) {
+                let signals = match Signals::new(once(sig_rt_min() + n)) {
                     Ok(s) => s,
                     Err(e) => {
                         return log::error!("Failed to start signal task for native music {}", e);
