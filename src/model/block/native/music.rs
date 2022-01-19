@@ -201,7 +201,13 @@ impl Display for Title {
             if layer == 0 || s.len() <= TRUNC_LEN {
                 (s, "")
             } else {
-                (&s[..TRUNC_LEN], "...")
+                let idx = s
+                    .char_indices()
+                    .take(TRUNC_LEN - 3)
+                    .last()
+                    .map(|(i, _)| i)
+                    .unwrap_or_default();
+                (&s[..idx], "...")
             }
         }
         match self {
