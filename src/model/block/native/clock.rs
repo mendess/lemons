@@ -1,9 +1,15 @@
 use std::time::Duration;
 
-use chrono::{Timelike, Utc};
-use tokio::{sync::broadcast::Sender, time::{sleep, timeout}};
+use chrono::{offset::Local, Timelike};
+use tokio::{
+    sync::broadcast::Sender,
+    time::{sleep, timeout},
+};
 
-use crate::{event_loop::{Event, current_layer}, model::block::{BlockTask, TaskData}};
+use crate::{
+    event_loop::{current_layer, Event},
+    model::block::{BlockTask, TaskData},
+};
 
 #[derive(Debug)]
 pub struct Clock;
@@ -14,7 +20,7 @@ impl BlockTask for Clock {
         tokio::spawn(async move {
             loop {
                 let layer = current_layer();
-                let out = Utc::now()
+                let out = Local::now()
                     .format(if layer == 0 {
                         "%d/%m %H:%M"
                     } else {
@@ -25,13 +31,13 @@ impl BlockTask for Clock {
                     log::info!("clock shutting down")
                 }
                 match timeout(dur_to_next_tick(layer), events.recv()).await {
-                    Ok(Ok(Event::Refresh | Event::NewLayer)) => {},
+                    Ok(Ok(Event::Refresh | Event::NewLayer)) => {}
                     Ok(Ok(_)) => continue,
                     Ok(Err(e)) => {
                         log::error!("Failed to receive events: {:?}", e);
                         sleep(dur_to_next_tick(layer)).await;
                     }
-                    Err(_) => {},
+                    Err(_) => {}
                 }
             }
         });
@@ -40,8 +46,12 @@ impl BlockTask for Clock {
 
 fn dur_to_next_tick(layer: u16) -> Duration {
     if layer == 0 {
-        Duration::from_secs((60 - Utc::now().time().second()).into())
+        Duration::from_secs((60 - Local::now().time().second()).into())
     } else {
-        Duration::from_millis(1000u32.saturating_sub(Utc::now().timestamp_subsec_millis()).into())
+        Duration::from_millis(
+            1000u32
+                .saturating_sub(Local::now().timestamp_subsec_millis())
+                .into(),
+        )
     }
 }
