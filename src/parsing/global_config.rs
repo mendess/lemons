@@ -24,7 +24,7 @@ impl<'a> GlobalConfig<'a> {
                 "background" | "bg" | "B" => global_config.background = Some(color()?),
                 "foreground" | "fg" | "F" => global_config.foreground = Some(color()?),
                 "underline" | "un" | "U" => global_config.underline = Some(color()?),
-                "font" | "f" => global_config.font = Some(value),
+                "font" | "f" => global_config.fonts.push(value),
                 "bottom" | "b" => {
                     global_config.bottom = value
                         .trim()

@@ -20,7 +20,7 @@ pub struct GlobalConfig<'a> {
     pub base_geometry: Option<&'a str>,
     pub bars_geometries: Vec<String>,
     pub bottom: bool,
-    pub font: Option<&'a str>,
+    pub fonts: Vec<&'a str>,
     pub n_clickbles: Option<u32>,
     pub name: Option<&'a str>,
     pub underline_width: Option<u32>,
@@ -47,8 +47,8 @@ impl<'a> GlobalConfig<'a> {
         if self.bottom {
             vector.extend_from_slice(&["-b".into()]);
         }
-        if let Some(f) = self.font {
-            vector.extend_from_slice(&["-f".into(), f.into()]);
+        for f in &self.fonts {
+            vector.extend_from_slice(&["-f".into(), String::from(*f)]);
         }
         if let Some(n) = self.n_clickbles {
             vector.extend_from_slice(&["-a".into(), n.to_string()]);
