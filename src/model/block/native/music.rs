@@ -1,194 +1,239 @@
-use super::super::{BlockId, BlockTask, Signal, TaskData};
-use crate::{
-    event_loop::{current_layer, update_channel::UpdateChannel, Event, MouseButton},
-    util::{result_ext::ResultExt, signal::sig_rt_min},
-};
+use super::super::{BlockId, BlockTask, TaskData};
+use crate::event_loop::{current_layer, Event, MouseButton};
 use futures::stream::StreamExt;
-use once_cell::sync::Lazy;
-use regex::Regex;
-use serde::{de::DeserializeOwned, Deserialize};
-use signal_hook_tokio::Signals;
+use mlib::players::{
+    self,
+    event::{OwnedLibMpvEvent, PlayerEvent},
+};
 use std::{
     fmt::{self, Display},
-    iter::once,
-    path::PathBuf,
-    time::{Duration, Instant},
+    sync::Arc,
 };
-use tokio::{
-    io::{self, AsyncWriteExt},
-    net::UnixStream,
-    sync::{broadcast, mpsc, Mutex},
-    time,
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Update {
-    Full,
-    Volume,
-    Title,
-    State,
-}
+use tokio::sync::{broadcast, watch};
 
 #[derive(Debug)]
 pub struct Music;
 
 impl BlockTask for Music {
-    fn start(
-        &self,
-        events: &broadcast::Sender<Event>,
-        TaskData {
-            bid,
-            updates,
-            signal,
-            ..
-        }: TaskData,
-    ) {
-        let (tx, rx) = mpsc::channel(10);
-        tokio::spawn(event_loop(events.subscribe(), bid, updates, rx));
+    fn start(&self, events: &broadcast::Sender<Event>, TaskData { updates, bid, .. }: TaskData) {
+        let events = events.subscribe();
         tokio::spawn(async move {
-            let _ = tx.send(()).await;
-            if let Signal::Num(n) = signal {
-                let signals = match Signals::new(once(sig_rt_min() + n)) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return log::error!("Failed to start signal task for native music {}", e);
-                    }
-                };
-                let sends = signals.then(|_| tx.send(()));
-                tokio::pin!(sends);
-                while let Some(Ok(_)) = sends.next().await {}
-                log::info!("music native terminating");
+            let (bar_data, _) = watch::channel(BarData::fetch().await.unwrap());
+            let mut receiver = bar_data.subscribe();
+            bar_data.send_modify(|_| {});
+            let bar_data = Arc::new(bar_data);
+            tokio::spawn(user_event_loop(events, bid, bar_data.clone()));
+            tokio::spawn(player_event_loop(bar_data));
+            while receiver.changed().await.is_ok() {
+                let data = receiver
+                    .borrow_and_update()
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                if updates.send((data, bid, u8::MAX).into()).await.is_err() {
+                    log::warn!("native music block shutting down");
+                    break;
+                }
             }
         });
     }
 }
 
-async fn update_bar(bar: &mut Option<BarData>, how: Update) {
-    match bar {
-        Some(b) => {
-            if match how {
-                Update::Full => {
-                    *bar = BarData::fetch().await.ok();
-                    Ok(())
-                }
-                Update::Volume => b.update_volume().await,
-                Update::Title => b.update_title().await,
-                Update::State => b.update_paused().await,
-            }
-            .is_err()
-            {
-                *bar = None;
-            };
-        }
-        None => *bar = BarData::fetch().await.ok(),
-    }
-}
+type BarDataWatcher = Arc<watch::Sender<Option<BarData>>>;
 
-async fn event_loop(
-    mut events: broadcast::Receiver<Event>,
+async fn user_event_loop(
+    mut ui_events: broadcast::Receiver<Event>,
     bid: BlockId,
-    updates: UpdateChannel,
-    mut ch: mpsc::Receiver<()>,
-) -> io::Result<()> {
-    let mut bar = None;
-    while let Ok(e) = tokio::select! {
-        e = events.recv() => e,
-        Some(_) = ch.recv() => Ok(Event::Signal)
-    } {
-        let up = match e {
+    bar_data: BarDataWatcher,
+) {
+    while let Ok(ev) = ui_events.recv().await {
+        match ev {
             Event::MouseClicked(id, _, button) if id == bid => {
-                let mut sock = socket().await?;
-                let (msg, up) = match button {
-                    MouseButton::ScrollUp => ("add volume 2\n", Update::Volume),
-                    MouseButton::ScrollDown => ("add volume -2\n", Update::Volume),
-                    MouseButton::Middle => ("cycle pause\n", Update::State),
-                    MouseButton::Left => ("playlist-prev\n", Update::Title),
-                    MouseButton::Right => ("playlist-next\n", Update::Title),
+                let e = match button {
+                    MouseButton::ScrollUp => players::change_volume(2).await,
+                    MouseButton::ScrollDown => players::change_volume(-2).await,
+                    MouseButton::Middle => players::cycle_pause().await,
+                    MouseButton::Left => players::change_file(players::Direction::Prev).await,
+                    MouseButton::Right => players::change_file(players::Direction::Next).await,
                 };
-                sock.write_all(msg.as_bytes()).await?;
-                if up == Update::Title {
-                    // if we don't do this we'll have a useless update that will almost always be
-                    // wrong since mpv still takes a bit of time to load the song
-                    continue;
+                if let Err(e) = e {
+                    log::error!("error pressing {button:?}: {e:?}");
                 }
-                up
             }
-            Event::MouseClicked(..) => continue,
-            Event::Refresh | Event::Signal => Update::Full,
-            Event::NewLayer => Update::Title,
-        };
-        time::sleep(Duration::from_millis(1)).await;
-        update_bar(&mut bar, up).await;
-        let b = bar.as_ref().map(ToString::to_string).unwrap_or_default();
-        if updates.send((b, bid, u8::MAX).into()).await.is_err() {
-            break;
+            Event::MouseClicked(..) | Event::Signal => {}
+            Event::NewLayer => bar_data.send_modify(|_| {}),
         }
     }
-    Ok(())
 }
 
-async fn socket() -> io::Result<UnixStream> {
-    const INVALID_THREASHOLD: Duration = Duration::from_secs(5);
+async fn reset_data(bar_data: &BarDataWatcher) {
+    let _ = match BarData::fetch().await {
+        Ok(data) => bar_data.send(data),
+        Err(e) => {
+            log::error!("failed to fetch data for new player: {e:?}");
+            bar_data.send(None)
+        }
+    };
+}
 
-    static SOCKET: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.mpvsocket[0-9]+$").unwrap());
-    static CURRENT: Lazy<Mutex<(PathBuf, Instant)>> = Lazy::new(|| {
-        Mutex::new((
-            PathBuf::new(),
-            Instant::now()
-                .checked_sub(INVALID_THREASHOLD)
-                .unwrap_or_else(Instant::now),
-        ))
-    });
-    static SOCKET_GLOB: Lazy<String> = Lazy::new(|| {
-        let mut glob = whoami::username();
-        glob.insert_str(0, "/tmp/");
-        glob.push_str("/.mpvsocket*");
-        glob
-    });
-
-    let mut current = CURRENT.lock().await;
-    if current.1.elapsed() >= INVALID_THREASHOLD {
-        let mut available_sockets: Vec<_> = glob::glob(&SOCKET_GLOB)
-            .unwrap()
-            .filter_map(Result::ok)
-            .filter(|x| x.to_str().map(|x| SOCKET.is_match(x)).unwrap_or(false))
-            .collect();
-        available_sockets.sort();
-        for s in available_sockets.into_iter().rev() {
-            if let Ok(sock) = UnixStream::connect(&s).await {
-                log::trace!("Opening a new socket {}", s.display());
-                current.0 = s;
-                current.1 = Instant::now();
-                return Ok(sock);
+async fn player_event_loop(bar_data: BarDataWatcher) {
+    let event_stream = players::subscribe().await.unwrap();
+    tokio::pin!(event_stream);
+    while let Some(ev) = event_stream.next().await {
+        let ev = match ev {
+            Ok(ev) => ev,
+            Err(e) => {
+                log::error!("error receiving event: {e:?}");
+                continue;
+            }
+        };
+        log::debug!("got event: {ev:?}");
+        let PlayerEvent {
+            player_index,
+            event,
+        } = ev;
+        if bar_data.borrow().as_ref().map(|d| d.player_index) != Some(player_index) {
+            reset_data(&bar_data).await
+        }
+        match event {
+            OwnedLibMpvEvent::PropertyChange { name, change, .. } => match name.as_str() {
+                "media-title" => {
+                    let Ok(title) = change.into_string() else {
+                         continue;
+                    };
+                    bar_data.send_if_modified(|data| update_title(data, title, player_index));
+                }
+                "volume" => {
+                    let Ok(volume) = change.into_double() else {
+                        continue;
+                    };
+                    bar_data.send_if_modified(|data| update_volume(data, volume, player_index));
+                }
+                "pause" => {
+                    let Ok(paused) = change.into_bool() else {
+                        continue;
+                    };
+                    bar_data.send_if_modified(|data| update_paused(data, paused, player_index));
+                }
+                "chapter-metadata" => {}
+                _ => {
+                    log::debug!("ignoring property change with name '{name}'");
+                }
+            },
+            OwnedLibMpvEvent::FileLoaded => 'fill: {
+                let (should_update_volume, should_update_paused) = {
+                    let data = bar_data.borrow();
+                    let Some(data) = &*data else {
+                        break 'fill;
+                    };
+                    let has_title = data.title.is_some();
+                    (
+                        has_title && data.volume.is_none(),
+                        has_title && data.paused.is_none(),
+                    )
+                };
+                if should_update_volume {
+                    if let Ok(volume) = players::volume().await {
+                        bar_data.send_if_modified(|data| update_volume(data, volume, player_index));
+                    }
+                }
+                if should_update_paused {
+                    if let Ok(paused) = players::is_paused().await {
+                        bar_data.send_if_modified(|data| update_paused(data, paused, player_index));
+                    }
+                }
+            }
+            OwnedLibMpvEvent::Shutdown => reset_data(&bar_data).await,
+            e => {
+                log::debug!("ignoring event {e:?}");
             }
         }
-        Err(io::ErrorKind::NotFound.into())
-    } else {
-        current.1 = Instant::now();
-        UnixStream::connect(&current.0).await
+    }
+}
+
+fn update_title(data: &mut Option<BarData>, title: String, player_index: usize) -> bool {
+    match data {
+        Some(t) => {
+            match &mut t.title {
+                Some(t) => t.media_title = title,
+                None => t.title = Some(Title::simple(title)),
+            };
+            true
+        }
+        None => {
+            *data = Some(BarData {
+                player_index,
+                title: Some(Title::simple(title)),
+                volume: None,
+                paused: None,
+            });
+            true
+        }
+    }
+}
+
+fn update_volume(data: &mut Option<BarData>, volume: f64, player_index: usize) -> bool {
+    match data {
+        Some(d) => {
+            let old = std::mem::replace(&mut d.volume, Some(volume));
+            old != d.volume
+        }
+        None => {
+            *data = Some(BarData {
+                player_index,
+                volume: Some(volume),
+                title: None,
+                paused: None,
+            });
+            true
+        }
+    }
+}
+
+fn update_paused(data: &mut Option<BarData>, paused: bool, player_index: usize) -> bool {
+    match data {
+        Some(d) => {
+            let old = std::mem::replace(&mut d.paused, Some(paused));
+            old != d.paused
+        }
+        None => {
+            *data = Some(BarData {
+                player_index,
+                title: None,
+                paused: Some(paused),
+                volume: None,
+            });
+            true
+        }
     }
 }
 
 #[derive(Debug)]
-enum Title {
-    Simple(String),
-    Complex { video: String, chapter: String },
+struct Title {
+    media_title: String,
+    chapter: Option<String>,
 }
 
 impl Title {
-    async fn fetch() -> io::Result<Title> {
-        let media_title = get_property("media-title").await?.merge();
-        #[derive(Deserialize)]
-        struct ChapterMetadata {
-            title: String,
-        }
-        if let Ok(Ok(chmeta)) = get_property::<ChapterMetadata>("chapter-metadata").await {
-            Ok(Title::Complex {
-                chapter: chmeta.title,
-                video: media_title,
+    async fn fetch() -> Result<Title, players::Error> {
+        let media_title = players::media_title().await?;
+        if let Ok(chmeta) = players::chapter_metadata().await {
+            Ok(Title {
+                media_title,
+                chapter: Some(chmeta.title),
             })
         } else {
-            Ok(Title::Simple(media_title))
+            Ok(Title {
+                media_title,
+                chapter: None,
+            })
+        }
+    }
+
+    fn simple(title: String) -> Self {
+        Self {
+            media_title: title,
+            chapter: None,
         }
     }
 }
@@ -210,14 +255,10 @@ impl Display for Title {
                 (&s[..idx], "...")
             }
         }
-        match self {
-            Title::Simple(s) => {
-                let (title, elipsis) = trunc(s);
-                write!(f, "{}{}", title, elipsis)
-            }
-            Title::Complex { video, chapter } => {
+        match &self.chapter {
+            Some(chapter) => {
                 let g = crate::global_config::get();
-                let (v, el) = trunc(video);
+                let (v, el) = trunc(&self.media_title);
                 let (c, el1) = trunc(chapter);
                 write!(
                     f,
@@ -229,115 +270,57 @@ impl Display for Title {
                     blue = g.get_color("blue").map(|c| c.0).unwrap_or("#5498F8"),
                 )
             }
+            None => {
+                let (title, elipsis) = trunc(&self.media_title);
+                write!(f, "{}{}", title, elipsis)
+            }
         }
     }
 }
 
 #[derive(Debug)]
 struct BarData {
-    title: Title,
-    paused: bool,
-    volume: f32,
+    player_index: usize,
+    title: Option<Title>,
+    paused: Option<bool>,
+    volume: Option<f64>,
 }
 
 impl BarData {
-    async fn fetch() -> io::Result<Self> {
-        let mut s = Self {
-            title: Title::fetch().await?,
-            paused: false,
-            volume: 0.0,
+    async fn fetch() -> Result<Option<Self>, players::Error> {
+        macro_rules! p {
+            ($result:expr) => {
+                match $result {
+                    Ok(t) => Some(t),
+                    Err(players::Error::Mpv(players::error::MpvError::NoMpvInstance)) => None,
+                    Err(e) => return Err(e),
+                }
+            };
+        }
+        let Some(index) = players::current().await? else {
+            return Ok(None);
         };
-        s.update_paused().await?;
-        s.update_volume().await?;
-        Ok(s)
-    }
-
-    async fn update_title(&mut self) -> io::Result<()> {
-        self.title = Title::fetch().await?;
-        Ok(())
-    }
-
-    async fn update_paused(&mut self) -> io::Result<()> {
-        self.paused = get_property("pause")
-            .await?
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        Ok(())
-    }
-
-    async fn update_volume(&mut self) -> io::Result<()> {
-        self.volume = get_property("volume")
-            .await?
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        Ok(())
+        Ok(Some(Self {
+            player_index: index,
+            title: p!(Title::fetch().await),
+            paused: p!(players::is_paused().await),
+            volume: p!(players::volume().await),
+        }))
     }
 }
 
 impl Display for BarData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {}%",
-            self.title,
-            if self.paused { "||" } else { ">" },
-            self.volume.round() as u64
-        )
-    }
-}
-
-async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, String>> {
-    #[derive(Deserialize)]
-    struct Payload<D> {
-        data: D,
-        error: String,
-    }
-
-    log::trace!("Opening socket");
-    let mut sock = socket().await?;
-    log::trace!("Checking if socket is writable");
-    sock.writable().await?;
-    log::trace!("Writing to the socket property '{}'", p);
-    sock.write_all(&serde_json::to_vec(
-        &serde_json::json!({ "command": [ "get_property", p ] }),
-    )?)
-    .await?;
-    sock.write_all(b"\n").await?;
-
-    let mut buf = Vec::with_capacity(1024);
-    'readloop: loop {
-        log::trace!("Waiting for the socket to become readable");
-        sock.readable().await?;
-        loop {
-            log::trace!("Trying to read from socket");
-            match sock.try_read_buf(&mut buf) {
-                Ok(_) => break 'readloop,
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    log::warn!("false positive read");
-                }
-                Err(e) => return Err(e),
-            };
+        write!(f, "[{}] ", self.player_index)?;
+        if let Some(title) = &self.title {
+            write!(f, "{title} ")?;
         }
-    }
-
-    if let Some(i) = buf.iter().position(|b| *b != 0) {
-        log::debug!(
-            "{} => {}",
-            p,
-            std::str::from_utf8(&buf)
-                .unwrap_or("some error happened")
-                .trim()
-        );
-        match buf[i..]
-            .split(|&b| b == b'\n')
-            .find_map(|b| serde_json::from_slice::<Payload<D>>(b).ok())
-        {
-            Some(p) => Ok(if p.error == "success" {
-                Ok(p.data)
-            } else {
-                Err(p.error)
-            }),
-            None => Err(io::ErrorKind::InvalidData.into()),
+        if let Some(paused) = self.paused {
+            write!(f, "{} ", if paused { "||" } else { ">" })?;
         }
-    } else {
-        Err(io::ErrorKind::UnexpectedEof.into())
+        if let Some(volume) = self.volume {
+            write!(f, "{volume}%")?;
+        }
+        Ok(())
     }
 }

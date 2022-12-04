@@ -31,7 +31,7 @@ impl super::BlockTask for Static {
                             let _ = run_cmd(a, mon, current_layer()).await;
                         }
                     }
-                    Event::Refresh | Event::Signal | Event::NewLayer | Event::MouseClicked(..) => {}
+                    Event::Signal | Event::NewLayer | Event::MouseClicked(..) => {}
                 }
             }
         });

@@ -52,9 +52,14 @@ impl From<u8> for MouseButton {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Event {
-    Refresh,
+    /// The update signal was received
     Signal,
+    /// The current layer changed
     NewLayer,
+    /// Mouse button clicked
+    /// .0: the id of the clicked block
+    /// .1: the monitor where the block was clicked
+    /// .2: the mouse button used
     MouseClicked(BlockId, u8, MouseButton),
 }
 

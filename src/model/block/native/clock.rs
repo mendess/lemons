@@ -31,7 +31,7 @@ impl BlockTask for Clock {
                     log::info!("clock shutting down")
                 }
                 match timeout(dur_to_next_tick(layer), events.recv()).await {
-                    Ok(Ok(Event::Refresh | Event::NewLayer)) => {}
+                    Ok(Ok(Event::NewLayer)) => {}
                     Ok(Ok(_)) => continue,
                     Ok(Err(e)) => {
                         log::error!("Failed to receive events: {:?}", e);

@@ -22,6 +22,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> io::Result<()> {
     env_logger::init();
+    mlib::players::start_daemon_if_running_as_daemon().await?;
     let args = Args::from_args();
     let input = args
         .config

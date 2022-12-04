@@ -55,8 +55,7 @@ impl super::BlockTask for Persistent {
                                     }
                                     Event::MouseClicked(..)
                                     | Event::Signal
-                                    | Event::NewLayer
-                                    | Event::Refresh => (),
+                                    | Event::NewLayer => (),
                                 }
                             }
                             else => break

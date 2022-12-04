@@ -64,23 +64,23 @@ impl super::BlockTask for Timed {
             }
             loop {
                 let event = if activation_layer == current_layer() {
-                    time::timeout(timeout, events.recv())
-                        .await
-                        .unwrap_or(Ok(Event::Refresh))
+                    time::timeout(timeout, events.recv()).await.ok()
                 } else {
-                    events.recv().await
+                    Some(events.recv().await)
                 };
-                match event {
-                    Ok(Event::MouseClicked(id, mon, button)) if id == bid => {
-                        if let Some(a) = actions[button] {
-                            let _ = run_cmd(a, mon, current_layer()).await;
+                if let Some(event) = event {
+                    match event {
+                        Ok(Event::MouseClicked(id, mon, button)) if id == bid => {
+                            if let Some(a) = actions[button] {
+                                let _ = run_cmd(a, mon, current_layer()).await;
+                            }
+                            continue;
                         }
-                        continue;
+                        Ok(Event::Signal) if signal.is_some() => {}
+                        Ok(Event::NewLayer) => {}
+                        Ok(Event::MouseClicked(..)) | Ok(Event::Signal) => continue,
+                        Err(_) => return,
                     }
-                    Ok(Event::Signal) if signal.is_some() => {}
-                    Ok(Event::NewLayer) | Ok(Event::Refresh) => {}
-                    Ok(Event::MouseClicked(..)) | Ok(Event::Signal) => continue,
-                    Err(_) => return,
                 }
                 if update_blocks(cmd, activation_layer, bid, monitors, &updates)
                     .await
