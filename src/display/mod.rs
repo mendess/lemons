@@ -15,4 +15,4 @@ pub trait Lemonbar: Write {
 }
 
 impl<'a> Lemonbar for fmt::Formatter<'a> {}
-impl<'a> Lemonbar for String {}
+impl Lemonbar for String {}

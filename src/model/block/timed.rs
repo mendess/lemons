@@ -103,7 +103,7 @@ async fn update_blocks(
     let layer = current_layer();
     if activation_layer == layer {
         for m in monitors.iter() {
-            let output = run_cmd(&cmd, m, layer)
+            let output = run_cmd(cmd, m, layer)
                 .await
                 .map_err(|e| e.to_string())
                 .merge();

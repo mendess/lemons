@@ -4,7 +4,7 @@ use tokio::{io, process::Command};
 
 pub async fn run_cmd(cmd: &str, monitor: u8, layer: u16) -> io::Result<String> {
     let spawned = Command::new("bash")
-        .args(&["-c", cmd])
+        .args(["-c", cmd])
         .envs(global_config::get().as_env_vars(monitor, layer))
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

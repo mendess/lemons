@@ -102,7 +102,7 @@ fn merge_geometries(geo1: &str, geo2: &str) -> String {
     let parse = |geo: &str| {
         let (geow, geo) = geo.split_at(geo.find('x').unwrap_or(0));
         let geo = geo.get(1..).unwrap_or("");
-        let (geoh, geo) = geo.split_at(geo.find('+').unwrap_or_else(|| geo.len()));
+        let (geoh, geo) = geo.split_at(geo.find('+').unwrap_or(geo.len()));
         let (geox, geoy) = geo
             .get(1..)
             .and_then(|s| s.find('+').map(|i| s.split_at(i)))

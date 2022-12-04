@@ -148,7 +148,7 @@ async fn socket() -> io::Result<UnixStream> {
 
     let mut current = CURRENT.lock().await;
     if current.1.elapsed() >= INVALID_THREASHOLD {
-        let mut available_sockets: Vec<_> = glob::glob(&*SOCKET_GLOB)
+        let mut available_sockets: Vec<_> = glob::glob(&SOCKET_GLOB)
             .unwrap()
             .filter_map(Result::ok)
             .filter(|x| x.to_str().map(|x| SOCKET.is_match(x)).unwrap_or(false))
@@ -300,7 +300,7 @@ async fn get_property<D: DeserializeOwned>(p: &str) -> io::Result<Result<D, Stri
         &serde_json::json!({ "command": [ "get_property", p ] }),
     )?)
     .await?;
-    sock.write(b"\n").await?;
+    sock.write_all(b"\n").await?;
 
     let mut buf = Vec::with_capacity(1024);
     'readloop: loop {

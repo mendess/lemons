@@ -25,28 +25,28 @@ async fn main() -> io::Result<()> {
     let args = Args::from_args();
     let input = args
         .config
-        .ok_or_else(|| io::ErrorKind::NotFound)
+        .ok_or(io::ErrorKind::NotFound)
         .map(|cfg| {
             log::info!("Loading config from command line");
             cfg
         })
         .or_else(|_| {
             env::var_os("XDG_CONFIG_HOME")
-                .ok_or_else(|| io::ErrorKind::NotFound)
+                .ok_or(io::ErrorKind::NotFound)
                 .map(|arg| {
                     log::info!("Loading config from xdg config home {:?}", arg);
                     let mut path = PathBuf::from(arg);
-                    path.extend(&["lemonbar", "lemonrc.md"]);
+                    path.extend(["lemonbar", "lemonrc.md"]);
                     path
                 })
         })
         .or_else(|_| {
             env::var_os("HOME")
-                .ok_or_else(|| io::ErrorKind::NotFound)
+                .ok_or(io::ErrorKind::NotFound)
                 .map(|home| {
                     log::info!("Loading config from ~/.config/lemonbar/lemonrc.md");
                     let mut path = PathBuf::from(home);
-                    path.extend(&[".config", "lemonbar", "lemonrc.md"]);
+                    path.extend([".config", "lemonbar", "lemonrc.md"]);
                     path
                 })
         })

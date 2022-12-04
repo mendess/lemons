@@ -70,7 +70,7 @@ impl super::BlockTask for Persistent {
 
 async fn run_cmd(cmd: &str, monitor: u8) -> io::Result<impl Stream<Item = io::Result<String>>> {
     let spawned = Command::new("bash")
-        .args(&["-c", cmd])
+        .args(["-c", cmd])
         .envs(global_config::get().as_env_vars(monitor, u16::MAX))
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

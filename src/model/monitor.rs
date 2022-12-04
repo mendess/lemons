@@ -21,15 +21,8 @@ impl ActiveMonitors {
 
     pub fn iter(self) -> impl Iterator<Item = u8> {
         match self {
-            Self::All => (u8::MAX..=u8::MAX),
-            Self::M(m) => (0..=(m - 1)),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            ActiveMonitors::All => 1,
-            ActiveMonitors::M(m) => *m as _,
+            Self::All => u8::MAX..=u8::MAX,
+            Self::M(m) => 0..=(m - 1),
         }
     }
 }

@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn key_value<'a>(s: &'a str) -> Result<(&'a str, &'a str)> {
+fn key_value(s: &str) -> Result<(&str, &str)> {
     let colon = s.find(':').ok_or(ParseError::Colon(s))?;
     let (key, value) = s.split_at(colon);
     Ok((key.trim(), value[1..].trim().trim_matches('`')))
@@ -71,7 +71,7 @@ impl<'a, 'parser> Iterator for KeyValues<'a, 'parser> {
             .filter(|a| !a.trim().is_empty())
             .map(|attr| {
                 if let Some(m) = BULLET.find(attr) {
-                    let (k, v) = key_value(&attr[m.end()..].trim())?;
+                    let (k, v) = key_value(attr[m.end()..].trim())?;
                     let level = (m.end() / 2) + 1;
                     Ok((k, v, level as u8))
                 } else {
