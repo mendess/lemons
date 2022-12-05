@@ -121,7 +121,7 @@ dependencies = [
 [[package]]
 name = "cli-daemon"
 version = "0.1.0"
-source = "git+https://github.com/mendess/m#8737d2119d326456fb6b940a3d4bc63354aedd7c"
+source = "git+https://github.com/mendess/m#77b7ffe45a9c19e58c64c67ab240019fdbafad68"
 dependencies = [
  "futures-util",
  "namespaced-tmp",
@@ -578,7 +578,7 @@ dependencies = [
 [[package]]
 name = "mlib"
 version = "0.3.2"
-source = "git+https://github.com/mendess/m#8737d2119d326456fb6b940a3d4bc63354aedd7c"
+source = "git+https://github.com/mendess/m#77b7ffe45a9c19e58c64c67ab240019fdbafad68"
 dependencies = [
  "arc-swap",
  "cli-daemon",
