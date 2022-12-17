@@ -3,6 +3,8 @@ mod color;
 mod global_config;
 pub mod parser;
 
+use std::num::NonZeroU8;
+
 use crate::{
     event_loop::Event,
     global_config::GlobalConfig,
@@ -33,6 +35,8 @@ pub enum ParseError<'a> {
     MalformedBlock(String),
     MissingAlignment,
     MissingContent,
+    TooManyBarSpecs { got: usize, max: u8 },
+    NeedAtLeastOneBarSpec,
 }
 
 pub type Result<'a, T> = std::result::Result<T, ParseError<'a>>;
@@ -55,7 +59,21 @@ pub fn parse(
     let mut indexes = Indexes::default();
     crate::global_config::set(global_config.clone());
     while let Some((_, kvs)) = parser.next_section()? {
-        let block = Block::from_kvs(bars.len() as u8, &mut indexes, kvs, broadcast, responses)?;
+        let block = Block::from_kvs(
+            NonZeroU8::new(
+                bars.len()
+                    .try_into()
+                    .map_err(|_| ParseError::TooManyBarSpecs {
+                        got: bars.len(),
+                        max: u8::MAX,
+                    })?,
+            )
+            .ok_or(ParseError::NeedAtLeastOneBarSpec)?,
+            &mut indexes,
+            kvs,
+            broadcast,
+            responses,
+        )?;
         if let Layer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);
         }

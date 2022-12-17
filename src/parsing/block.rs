@@ -8,7 +8,9 @@ use crate::{
     },
     util::signal::valid_rt_signum,
 };
-use std::{convert::TryInto, result::Result as StdResult, str::FromStr, time::Duration};
+use std::{
+    convert::TryInto, num::NonZeroU8, result::Result as StdResult, str::FromStr, time::Duration,
+};
 use tokio::sync::{broadcast, mpsc};
 
 impl FromStr for Alignment {
@@ -53,7 +55,7 @@ enum BlockType {
 //
 impl Block<'static> {
     pub fn from_kvs<'parser>(
-        n_monitors: u8,
+        n_monitors: NonZeroU8,
         indexes: &mut Indexes,
         iter: KeyValues<'static, 'parser>,
         broadcast: &broadcast::Sender<Event>,
@@ -178,7 +180,7 @@ impl Block<'static> {
         }
         if let Some((value, kind)) = cmd {
             let monitors = if multi_monitor {
-                ActiveMonitors::M(n_monitors)
+                ActiveMonitors::MonitorCount(n_monitors)
             } else {
                 ActiveMonitors::All
             };
