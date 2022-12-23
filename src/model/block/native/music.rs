@@ -18,6 +18,7 @@ impl BlockTask for Music {
     fn start(&self, events: &broadcast::Sender<Event>, TaskData { updates, bid, .. }: TaskData) {
         let events = events.subscribe();
         tokio::spawn(async move {
+            players::wait_for_music_daemon_to_start().await;
             let (bar_data, _) = watch::channel(BarData::fetch().await.unwrap());
             let mut receiver = bar_data.subscribe();
             bar_data.send_modify(|_| {});
@@ -78,6 +79,7 @@ async fn reset_data(bar_data: &BarDataWatcher) {
 
 async fn player_event_loop(bar_data: BarDataWatcher) {
     let event_stream = players::subscribe().await.unwrap();
+    reset_data(&bar_data).await;
     tokio::pin!(event_stream);
     while let Some(ev) = event_stream.next().await {
         let ev = match ev {
