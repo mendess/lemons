@@ -117,7 +117,20 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
                     };
                     bar_data.send_if_modified(|data| update_paused(data, paused, player_index));
                 }
-                "chapter-metadata" => {}
+                "chapter-metadata" => {
+                    let Ok(mut map) = change.into_map() else {
+                        continue;
+                    };
+
+                    let Some(title) = map.remove("title") else {
+                        continue;
+                    };
+
+                    let Ok(title) = title.into_string() else {
+                         continue;
+                    };
+                    bar_data.send_if_modified(|data| update_chapter(data, title, player_index));
+                }
                 _ => {
                     log::debug!("ignoring property change with name '{name}'");
                 }
@@ -128,7 +141,8 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
                     let Some(data) = &*data else {
                         break 'fill;
                     };
-                    let has_title = data.title.is_some();
+                    let has_title =
+                        data.title.media_title.is_some() || data.title.chapter.is_some();
                     (
                         has_title && data.volume.is_none(),
                         has_title && data.paused.is_none(),
@@ -156,16 +170,13 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
 fn update_title(data: &mut Option<BarData>, title: String, player_index: usize) -> bool {
     match data {
         Some(t) => {
-            match &mut t.title {
-                Some(t) => t.media_title = title,
-                None => t.title = Some(Title::simple(title)),
-            };
-            true
+            let old = std::mem::replace(&mut t.title.media_title, Some(title));
+            old != t.title.media_title
         }
         None => {
             *data = Some(BarData {
                 player_index,
-                title: Some(Title::simple(title)),
+                title: Title::simple(title),
                 volume: None,
                 paused: None,
             });
@@ -184,7 +195,7 @@ fn update_volume(data: &mut Option<BarData>, volume: f64, player_index: usize) -
             *data = Some(BarData {
                 player_index,
                 volume: Some(volume),
-                title: None,
+                title: Title::default(),
                 paused: None,
             });
             true
@@ -201,7 +212,7 @@ fn update_paused(data: &mut Option<BarData>, paused: bool, player_index: usize) 
         None => {
             *data = Some(BarData {
                 player_index,
-                title: None,
+                title: Title::default(),
                 paused: Some(paused),
                 volume: None,
             });
@@ -210,9 +221,27 @@ fn update_paused(data: &mut Option<BarData>, paused: bool, player_index: usize) 
     }
 }
 
-#[derive(Debug)]
+fn update_chapter(data: &mut Option<BarData>, chapter_title: String, player_index: usize) -> bool {
+    match data {
+        Some(d) => {
+            let old = std::mem::replace(&mut d.title.chapter, Some(chapter_title));
+            old != d.title.chapter
+        }
+        None => {
+            *data = Some(BarData {
+                player_index,
+                title: Title::with_chapter(chapter_title),
+                paused: None,
+                volume: None,
+            });
+            true
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct Title {
-    media_title: String,
+    media_title: Option<String>,
     chapter: Option<String>,
 }
 
@@ -221,12 +250,12 @@ impl Title {
         let media_title = players::media_title().await?;
         if let Ok(chmeta) = players::chapter_metadata().await {
             Ok(Title {
-                media_title,
+                media_title: Some(media_title),
                 chapter: Some(chmeta.title),
             })
         } else {
             Ok(Title {
-                media_title,
+                media_title: Some(media_title),
                 chapter: None,
             })
         }
@@ -234,8 +263,15 @@ impl Title {
 
     fn simple(title: String) -> Self {
         Self {
-            media_title: title,
+            media_title: Some(title),
             chapter: None,
+        }
+    }
+
+    fn with_chapter(chapter: String) -> Self {
+        Self {
+            media_title: None,
+            chapter: Some(chapter),
         }
     }
 }
@@ -257,10 +293,13 @@ impl Display for Title {
                 (&s[..idx], "...")
             }
         }
+        let Some(media_title) = &self.media_title else {
+            return Ok(())
+        };
         match &self.chapter {
             Some(chapter) => {
                 let g = crate::global_config::get();
-                let (v, el) = trunc(&self.media_title);
+                let (v, el) = trunc(media_title);
                 let (c, el1) = trunc(chapter);
                 write!(
                     f,
@@ -273,7 +312,7 @@ impl Display for Title {
                 )
             }
             None => {
-                let (title, elipsis) = trunc(&self.media_title);
+                let (title, elipsis) = trunc(media_title);
                 write!(f, "{}{}", title, elipsis)
             }
         }
@@ -283,7 +322,7 @@ impl Display for Title {
 #[derive(Debug)]
 struct BarData {
     player_index: usize,
-    title: Option<Title>,
+    title: Title,
     paused: Option<bool>,
     volume: Option<f64>,
 }
@@ -302,9 +341,14 @@ impl BarData {
         let Some(index) = players::current().await? else {
             return Ok(None);
         };
+        let title = match Title::fetch().await {
+            Ok(t) => t,
+            Err(players::Error::Mpv(players::error::MpvError::NoMpvInstance)) => Title::default(),
+            Err(e) => return Err(e),
+        };
         Ok(Some(Self {
             player_index: index,
-            title: p!(Title::fetch().await),
+            title,
             paused: p!(players::is_paused().await),
             volume: p!(players::volume().await),
         }))
@@ -314,9 +358,7 @@ impl BarData {
 impl Display for BarData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}] ", self.player_index)?;
-        if let Some(title) = &self.title {
-            write!(f, "{title} ")?;
-        }
+        write!(f, "{} ", self.title)?;
         if let Some(paused) = self.paused {
             write!(f, "{} ", if paused { "||" } else { ">" })?;
         }
