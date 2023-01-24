@@ -99,6 +99,18 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
         }
         match event {
             OwnedLibMpvEvent::PropertyChange { name, change, .. } => match name.as_str() {
+                "playlist-pos" => {
+                    bar_data.send_if_modified(|data| {
+                        let Some(data) = data.as_mut()  else {
+                            return false;
+                        };
+                        let get_state = |data: &BarData| data.title.chapter.is_some();
+                        let before = get_state(data);
+                        data.title.chapter.take();
+                        let after = get_state(data);
+                        before != after
+                    });
+                }
                 "media-title" => {
                     let Ok(title) = change.into_string() else {
                          continue;
