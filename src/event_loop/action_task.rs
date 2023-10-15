@@ -26,16 +26,38 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
                     buf.clear();
                     let action = match out.read_line(&mut buf).await {
                         Ok(0) => break,
-                        Ok(_) => match buf.parse::<Action>() {
-                            Ok(a) => a,
-                            Err(e) => {
-                                if cfg!(debug_assertions) {
-                                    log::error!("Failed to parse buf '{}' because: {}", buf, e);
-                                }
-                                let _ = cmd::run_cmd(&buf, 0, current_layer()).await;
+                        // TODO: zelbar currently only suports one action pre block, as such, the
+                        // syntax is actually %{A:command} instead of %{AX:command} but the parser
+                        // doesn't enforce this, it just assumes there is a `:` after the A and
+                        // skips it. As such, if you output an action in the lemonbar format, the
+                        // command will start with `:` and then you'll get a error running the
+                        // command
+                        //
+                        // This method means that for lemobar no command can start with `:` but
+                        // that's okay since I've never seen such a command (besides `true`).
+                        Ok(_) => {
+                            let buf = buf.trim();
+                            if buf == ":" {
+                                let _ = cmd::run_cmd(buf, 0, current_layer()).await;
                                 continue;
+                            } else {
+                                log::trace!("lembar output: '{buf}'");
+                                match buf.trim_start_matches(':').parse::<Action>() {
+                                    Ok(a) => a,
+                                    Err(e) => {
+                                        if cfg!(debug_assertions) {
+                                            log::error!(
+                                                "Failed to parse buf '{}' because: {}",
+                                                buf,
+                                                e
+                                            );
+                                        }
+                                        let _ = cmd::run_cmd(buf, 0, current_layer()).await;
+                                        continue;
+                                    }
+                                }
                             }
-                        },
+                        }
                         Err(e) => {
                             log::error!("Error reading from lemonbar: {:?}", e);
                             continue;

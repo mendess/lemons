@@ -1,5 +1,6 @@
 pub mod implementations;
 mod lemonbar;
+mod zelbar;
 
 use std::{fmt, str::FromStr};
 
@@ -11,11 +12,13 @@ use crate::{
     },
 };
 pub use lemonbar::Lemonbar;
+pub use zelbar::Zelbar;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Program {
     #[default]
     Lemonbar,
+    Zelbar,
 }
 
 impl FromStr for Program {
@@ -23,6 +26,7 @@ impl FromStr for Program {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "lemonbar" => Ok(Self::Lemonbar),
+            "zelbar" => Ok(Self::Zelbar),
             _ => Err(format!("unsuported program '{s}'")),
         }
     }
@@ -31,6 +35,7 @@ impl FromStr for Program {
 impl Program {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::Zelbar => "zelbar",
             Self::Lemonbar => "lemonbar",
         }
     }

@@ -6,6 +6,7 @@ pub mod parser;
 use std::num::NonZeroU8;
 
 use crate::{
+    display::Program,
     event_loop::Event,
     global_config::GlobalConfig,
     model::Layer,
@@ -45,6 +46,7 @@ pub fn parse(
     config: &'static str,
     outputs: Vec<String>,
     tray: bool,
+    program: Program,
     broadcast: &broadcast::Sender<Event>,
     responses: &mpsc::Sender<BlockUpdate>,
 ) -> Result<'static, Config<'static>> {
@@ -54,6 +56,7 @@ pub fn parse(
         .map(|(_, kvs)| kvs)
         .map(GlobalConfig::from_kvs)
         .unwrap_or_else(|| Ok(Default::default()))?;
+    global_config.program = program;
 
     let mut blocks = Config::default();
     let mut indexes = Indexes::default();

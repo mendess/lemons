@@ -16,7 +16,7 @@ use std::{
     process::Stdio,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc,
+        Arc, Once,
     },
 };
 use tokio::{
@@ -169,13 +169,16 @@ where
         .map(|a| (a, &config[a]))
         .filter(|(_, c)| !c.is_empty())
         .for_each(|(al, blocks)| {
-            bar.set_alignment(al).unwrap();
+            let set_alignment = Once::new();
             blocks
                 .iter()
                 .enumerate()
                 .filter(|(_, b)| !b.last_run[monitor].is_empty())
                 .filter(|(_, b)| b.layer == current_layer)
-                .for_each(|(index, b)| display_block(&mut bar, b, index, monitor).unwrap());
+                .for_each(|(index, b)| {
+                    set_alignment.call_once(|| bar.set_alignment(al).unwrap());
+                    display_block(&mut bar, b, index, monitor).unwrap()
+                });
         });
     // TODO: line.lemon('O', tray_offset).unwrap();
     let mut line = bar.into_inner();

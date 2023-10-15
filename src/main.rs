@@ -1,7 +1,12 @@
 use clap::Parser;
 use enum_iterator::IntoEnumIterator;
 use env_logger::Env;
-use lemon::{display, event_loop, model::Alignment, parsing::parse};
+use lemon::{
+    display::{self, Program},
+    event_loop,
+    model::Alignment,
+    parsing::parse,
+};
 use std::{env, fs, io, path::PathBuf};
 use tokio::sync::{broadcast, mpsc};
 
@@ -16,6 +21,8 @@ struct Args {
     outputs: Vec<String>,
     #[arg(short, long)]
     tray: bool,
+    #[arg(short, long, default_value = "lemonbar")]
+    program: Program,
 }
 
 // TODO:
@@ -59,7 +66,14 @@ async fn main() -> io::Result<()> {
     let input = Box::leak(input.into_boxed_str());
     let (bc_send, mut bc_recv) = broadcast::channel(100);
     let (mpsc_send, mpsc_recv) = mpsc::channel(100);
-    let blocks = match parse(input, args.outputs, args.tray, &bc_send, &mpsc_send) {
+    let blocks = match parse(
+        input,
+        args.outputs,
+        args.tray,
+        args.program,
+        &bc_send,
+        &mpsc_send,
+    ) {
         Ok(bs) => bs,
         Err(e) => {
             log::error!("Parse error: {:?}", e);
@@ -84,6 +98,13 @@ async fn main() -> io::Result<()> {
     } else {
         drop(bc_recv);
     }
-    event_loop::start_event_loop::<display::Lemonbar<_>>(blocks, bc_send, mpsc_recv).await;
+    match args.program {
+        Program::Zelbar => {
+            event_loop::start_event_loop::<display::Zelbar<_>>(blocks, bc_send, mpsc_recv).await
+        }
+        Program::Lemonbar => {
+            event_loop::start_event_loop::<display::Lemonbar<_>>(blocks, bc_send, mpsc_recv).await
+        }
+    }
     Ok(())
 }

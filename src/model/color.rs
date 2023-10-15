@@ -16,4 +16,8 @@ impl Color {
     pub fn to_code(&self) -> String {
         DisplayColor::lemonbar(*self).to_string()
     }
+
+    pub fn to_hex(&self) -> String {
+        DisplayColor::zelbar(*self).to_string()
+    }
 }

@@ -13,6 +13,10 @@ impl DisplayColor {
     pub fn lemonbar(color: Color) -> Self {
         Self(color, Program::Lemonbar)
     }
+
+    pub fn zelbar(color: Color) -> Self {
+        Self(color, Program::Zelbar)
+    }
 }
 
 impl Display for DisplayColor {
@@ -21,6 +25,8 @@ impl Display for DisplayColor {
         match (self.1, a) {
             (Program::Lemonbar, Some(a)) => write!(f, "#{a:02X}{r:02X}{g:02X}{b:02X}"),
             (Program::Lemonbar, None) => write!(f, "#{r:02X}{g:02X}{b:02X}"),
+            (Program::Zelbar, Some(a)) => write!(f, "0x{r:02X}{g:02X}{b:02X}{a:02X}"),
+            (Program::Zelbar, None) => write!(f, "0x{r:02X}{g:02X}{b:02X}"),
         }
     }
 }
