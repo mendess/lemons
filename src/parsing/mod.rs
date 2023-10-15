@@ -43,7 +43,7 @@ pub type Result<'a, T> = std::result::Result<T, ParseError<'a>>;
 
 pub fn parse(
     config: &'static str,
-    bars: Vec<String>,
+    outputs: Vec<String>,
     tray: bool,
     broadcast: &broadcast::Sender<Event>,
     responses: &mpsc::Sender<BlockUpdate>,
@@ -58,22 +58,17 @@ pub fn parse(
     let mut blocks = Config::default();
     let mut indexes = Indexes::default();
     crate::global_config::set(global_config.clone());
+    let bar_spec_count = outputs
+        .len()
+        .try_into()
+        .map_err(|_| ParseError::TooManyBarSpecs {
+            got: outputs.len(),
+            max: u8::MAX,
+        })
+        .map(NonZeroU8::new)?
+        .unwrap_or_else(|| NonZeroU8::new(1).unwrap());
     while let Some((_, kvs)) = parser.next_section()? {
-        let block = Block::from_kvs(
-            NonZeroU8::new(
-                bars.len()
-                    .try_into()
-                    .map_err(|_| ParseError::TooManyBarSpecs {
-                        got: bars.len(),
-                        max: u8::MAX,
-                    })?,
-            )
-            .ok_or(ParseError::NeedAtLeastOneBarSpec)?,
-            &mut indexes,
-            kvs,
-            broadcast,
-            responses,
-        )?;
+        let block = Block::from_kvs(bar_spec_count, &mut indexes, kvs, broadcast, responses)?;
         if let Layer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);
         }
@@ -81,7 +76,7 @@ pub fn parse(
     }
     global_config.n_layers += 1;
     global_config.tray = tray;
-    global_config.bars_geometries = bars;
+    global_config.outputs = outputs;
     crate::global_config::set(global_config);
     Ok(blocks)
 }

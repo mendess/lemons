@@ -67,17 +67,28 @@ pub enum Event {
     MouseClicked(BlockId, u8, MouseButton),
 }
 
-fn spawn_bar<A, S>(args: A) -> (Child, ChildStdin, ChildStdout)
+fn spawn_bar<A, S, W, B>(args: A) -> (Child, ChildStdin, ChildStdout)
 where
     A: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
+    B: Bar<W>,
+    W: std::fmt::Write,
 {
-    let mut lemonbar = Command::new("lemonbar")
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Couldn't start lemonbar");
+    let mut lemonbar = Command::new(B::PROGRAM);
+
+    lemonbar.stdin(Stdio::piped()).stdout(Stdio::piped());
+
+    if log::log_enabled!(log::Level::Debug) {
+        let args = args.into_iter().collect::<Vec<_>>();
+        let args = args.iter().map(|s| s.as_ref()).collect::<Vec<_>>();
+        log::debug!("spawning {} with args {:?}", B::PROGRAM, args);
+        lemonbar.args(args);
+    } else {
+        lemonbar.args(args);
+    }
+
+    let mut lemonbar = lemonbar.spawn().expect("Couldn't start lemonbar");
+
     let (le_in, le_out) = (
         lemonbar.stdin.take().expect("Failed to find lemon stdin"),
         lemonbar.stdout.take().expect("Failed to find lemon stdout"),
@@ -99,16 +110,17 @@ pub async fn start_event_loop<B>(
     B: Bar<String>,
 {
     let global_config = crate::global_config::get();
-    let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.bars_geometries.is_empty() {
-        let (bar, lemon_inputs, lemon_outputs) = spawn_bar(&global_config.to_arg_list(None));
+    let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.outputs.is_empty() {
+        let (bar, lemon_inputs, lemon_outputs) =
+            spawn_bar::<_, _, _, B>(&global_config.to_arg_list::<_, B>(None));
         (vec![bar], vec![lemon_inputs], vec![lemon_outputs])
     } else {
         unzip_n::unzip_n!(3);
         global_config
-            .bars_geometries
+            .outputs
             .iter()
-            .map(|g| global_config.to_arg_list(Some(g)))
-            .map(spawn_bar)
+            .map(|g| global_config.to_arg_list::<_, B>(Some(g)))
+            .map(spawn_bar::<_, _, _, B>)
             .unzip_n()
     };
     let events = Arc::new(Mutex::new(events));

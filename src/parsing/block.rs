@@ -54,10 +54,10 @@ enum BlockType {
 //   - Mouse button clicked
 //
 impl Block<'static> {
-    pub fn from_kvs<'parser>(
+    pub fn from_kvs(
         n_monitors: NonZeroU8,
         indexes: &mut Indexes,
-        iter: KeyValues<'static, 'parser>,
+        iter: KeyValues<'static, '_>,
         broadcast: &broadcast::Sender<Event>,
         responses: &mpsc::Sender<BlockUpdate>,
     ) -> Result<'static, Self> {

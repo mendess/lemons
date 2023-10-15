@@ -31,14 +31,6 @@ impl<'a> GlobalConfig<'a> {
                         .parse()
                         .map_err(|_| ParseError::InvalidBoolean(value))?
                 }
-                "n_clickables" | "a" => {
-                    global_config.n_clickbles = Some(
-                        value
-                            .trim()
-                            .parse()
-                            .map_err(|_| ParseError::InvalidInteger(value))?,
-                    )
-                }
                 "underline_width" | "u" => {
                     global_config.underline_width = Some(
                         value
@@ -48,7 +40,14 @@ impl<'a> GlobalConfig<'a> {
                     )
                 }
                 "separator" => global_config.separator = Some(value),
-                "geometry" | "g" => global_config.base_geometry = Some(value),
+                "height" | "h" => {
+                    global_config.height = Some(
+                        value
+                            .trim()
+                            .parse()
+                            .map_err(|_| ParseError::InvalidInteger(value))?,
+                    )
+                }
                 "name" | "n" => global_config.name = Some(value),
                 "colors" | "colours" | "c" => in_colors = true,
                 key if level == 2 && in_colors => {

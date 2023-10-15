@@ -18,13 +18,32 @@ pub trait Bar<W: fmt::Write> {
     where
         Self: 'bar;
 
+    type CmdlineArgBuilder: CmdlineArgBuilder;
+
+    const PROGRAM: &'static str;
+
     fn new(sink: W, separator: Option<&'static str>) -> Self;
+
+    fn cmdline_builder() -> Self::CmdlineArgBuilder;
 
     fn set_alignment(&mut self, alignment: Alignment) -> fmt::Result;
 
     fn start_block(&mut self) -> Result<Self::BarBlockBuilder<'_>, fmt::Error>;
 
     fn into_inner(self) -> W;
+}
+
+pub trait CmdlineArgBuilder {
+    fn output(&mut self, name: &str);
+    fn height(&mut self, height: u32);
+    fn bottom(&mut self);
+    fn fonts<'s>(&mut self, fonts: impl Iterator<Item = &'s str>);
+    fn name(&mut self, name: &str);
+    fn underline_width(&mut self, width: u32);
+    fn underline_color(&mut self, color: &Color<'_>);
+    fn background(&mut self, color: &Color<'_>);
+    fn foreground(&mut self, color: &Color<'_>);
+    fn finish(self) -> Vec<String>;
 }
 
 pub trait DisplayBlock {

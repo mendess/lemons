@@ -1,5 +1,8 @@
 use super::Color;
-use crate::util::number_as_str;
+use crate::{
+    display::{Bar, CmdlineArgBuilder},
+    util::number_as_str,
+};
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, iter::once, sync::Arc};
@@ -17,11 +20,10 @@ pub fn get() -> Arc<GlobalConfig<'static>> {
 
 #[derive(Default, Clone)]
 pub struct GlobalConfig<'a> {
-    pub base_geometry: Option<&'a str>,
-    pub bars_geometries: Vec<String>,
+    pub height: Option<u32>,
+    pub outputs: Vec<String>,
     pub bottom: bool,
     pub fonts: Vec<&'a str>,
-    pub n_clickbles: Option<u32>,
     pub name: Option<&'a str>,
     pub underline_width: Option<u32>,
     pub background: Option<Color<'a>>,
@@ -34,42 +36,38 @@ pub struct GlobalConfig<'a> {
 }
 
 impl<'a> GlobalConfig<'a> {
-    pub fn to_arg_list(&self, extra_geomtery: Option<&str>) -> Vec<String> {
-        let mut vector: Vec<String> = vec![];
-        if let Some(g) = &self.base_geometry {
-            vector.extend_from_slice(&[
-                "-g".into(),
-                extra_geomtery
-                    .map(|e| merge_geometries(g, e))
-                    .unwrap_or_else(|| g.to_string()),
-            ]);
+    pub fn to_arg_list<W, B>(&self, output: Option<&str>) -> Vec<String>
+    where
+        B: Bar<W>,
+        W: std::fmt::Write,
+    {
+        let mut arg_builder = B::cmdline_builder();
+        if let Some(h) = self.height {
+            arg_builder.height(h)
+        }
+        if let Some(o) = output {
+            arg_builder.output(o)
         }
         if self.bottom {
-            vector.extend_from_slice(&["-b".into()]);
+            arg_builder.bottom();
         }
-        for f in &self.fonts {
-            vector.extend_from_slice(&["-f".into(), String::from(*f)]);
-        }
-        if let Some(n) = self.n_clickbles {
-            vector.extend_from_slice(&["-a".into(), n.to_string()]);
-        }
+        arg_builder.fonts(self.fonts.iter().copied());
         if let Some(n) = self.name {
-            vector.extend_from_slice(&["-n".into(), n.to_string()]);
+            arg_builder.name(n);
         }
         if let Some(u) = self.underline_width {
-            vector.extend_from_slice(&["-u".into(), u.to_string()]);
+            arg_builder.underline_width(u);
         }
         if let Some(bg) = &self.background {
-            vector.extend_from_slice(&["-B".into(), bg.to_string()]);
+            arg_builder.background(bg)
         }
         if let Some(fg) = &self.foreground {
-            vector.extend_from_slice(&["-F".into(), fg.to_string()]);
+            arg_builder.foreground(fg)
         }
         if let Some(un) = &self.underline {
-            vector.extend_from_slice(&["-U".into(), un.to_string()]);
+            arg_builder.underline_color(un)
         }
-        vector.extend_from_slice(&["-d".into()]);
-        vector
+        arg_builder.finish()
     }
 
     pub fn get_color<'s>(&'s self, name: &str) -> Option<&'s Color<'a>> {
@@ -90,39 +88,4 @@ impl<'a> GlobalConfig<'a> {
             .chain(once(("LEMON_LAYER", number_as_str(layer as u8))))
             .chain(self.colors.iter().map(|(_, (k, v))| (k.as_str(), v.0)))
     }
-}
-
-fn merge_geometries(geo1: &str, geo2: &str) -> String {
-    if geo1.is_empty() {
-        return geo2.into();
-    }
-    if geo2.is_empty() {
-        return geo1.into();
-    }
-    let parse = |geo: &str| {
-        let (geow, geo) = geo.split_at(geo.find('x').unwrap_or(0));
-        let geo = geo.get(1..).unwrap_or("");
-        let (geoh, geo) = geo.split_at(geo.find('+').unwrap_or(geo.len()));
-        let (geox, geoy) = geo
-            .get(1..)
-            .and_then(|s| s.find('+').map(|i| s.split_at(i)))
-            .unwrap_or(("", ""));
-        (
-            geow.parse::<i32>().unwrap_or(0),
-            geoh.parse::<i32>().unwrap_or(0),
-            geox.parse::<i32>().unwrap_or(0),
-            geoy.parse::<i32>().unwrap_or(0),
-        )
-    };
-
-    let (geo1w, geo1h, geo1x, geo1y) = parse(geo1);
-    let (geo2w, geo2h, geo2x, geo2y) = parse(geo2);
-
-    format!(
-        "{}x{}+{}+{}",
-        geo1w + geo2w,
-        geo1h + geo2h,
-        geo1x + geo2x,
-        geo1y + geo2y
-    )
 }

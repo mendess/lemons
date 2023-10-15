@@ -1,17 +1,20 @@
+use clap::Parser;
 use enum_iterator::IntoEnumIterator;
-use lemon::{display::Lemonbar, event_loop, model::Alignment, parsing::parse};
+use env_logger::Env;
+use lemon::{display, event_loop, model::Alignment, parsing::parse};
 use std::{env, fs, io, path::PathBuf};
-use structopt::StructOpt;
 use tokio::sync::{broadcast, mpsc};
 
-#[derive(Debug, Default, StructOpt)]
-#[structopt(name = "lemons")]
+#[derive(Debug, Parser)]
+#[command(author, version, about)]
 struct Args {
-    #[structopt(short, long, help("Path to the config file"))]
+    /// Path to the config file
+    #[arg(short, long)]
     config: Option<PathBuf>,
-    #[structopt(short, long("--bar"), help("The parameters to pass to each bar"))]
-    bars: Vec<String>,
-    #[structopt(short, long)]
+    /// The parameters to pass to each bar
+    #[arg(short, long("output"))]
+    outputs: Vec<String>,
+    #[arg(short, long)]
     tray: bool,
 }
 
@@ -21,8 +24,8 @@ struct Args {
 // - attribute
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    env_logger::init();
-    let args = Args::from_args();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    let args = Args::parse();
     let input = args
         .config
         .ok_or(io::ErrorKind::NotFound)
@@ -56,7 +59,7 @@ async fn main() -> io::Result<()> {
     let input = Box::leak(input.into_boxed_str());
     let (bc_send, mut bc_recv) = broadcast::channel(100);
     let (mpsc_send, mpsc_recv) = mpsc::channel(100);
-    let blocks = match parse(input, args.bars, args.tray, &bc_send, &mpsc_send) {
+    let blocks = match parse(input, args.outputs, args.tray, &bc_send, &mpsc_send) {
         Ok(bs) => bs,
         Err(e) => {
             log::error!("Parse error: {:?}", e);
@@ -81,6 +84,6 @@ async fn main() -> io::Result<()> {
     } else {
         drop(bc_recv);
     }
-    event_loop::start_event_loop::<Lemonbar<_>>(blocks, bc_send, mpsc_recv).await;
+    event_loop::start_event_loop::<display::Lemonbar<_>>(blocks, bc_send, mpsc_recv).await;
     Ok(())
 }
