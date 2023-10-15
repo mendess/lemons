@@ -7,17 +7,6 @@ pub enum Alignment {
     Right = 2,
 }
 
-impl Alignment {
-    pub fn to_lemon(self) -> &'static str {
-        use Alignment::*;
-        match self {
-            Left => "%{l}",
-            Middle => "%{c}",
-            Right => "%{r}",
-        }
-    }
-}
-
 impl From<u8> for Alignment {
     fn from(x: u8) -> Self {
         use Alignment::*;

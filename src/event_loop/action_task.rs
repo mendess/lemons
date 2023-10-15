@@ -1,4 +1,4 @@
-use super::{current_layer, Event};
+use super::{current_layer, Event, MouseButton};
 use crate::{
     model::{block::BlockId, Alignment},
     util::cmd,
@@ -51,13 +51,13 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
 }
 
 pub struct Action {
-    id: BlockId,
-    monitor: u8,
-    button: u8,
+    pub id: BlockId,
+    pub monitor: u8,
+    pub button: MouseButton,
 }
 
 impl Action {
-    pub fn new(alignment: Alignment, index: usize, monitor: u8, button: u8) -> Self {
+    pub fn new(alignment: Alignment, index: usize, monitor: u8, button: MouseButton) -> Self {
         Self {
             id: (alignment, index),
             monitor,
@@ -68,7 +68,7 @@ impl Action {
 
 impl From<Action> for Event {
     fn from(a: Action) -> Self {
-        Event::MouseClicked(a.id, a.monitor, a.button.into())
+        Event::MouseClicked(a.id, a.monitor, a.button)
     }
 }
 
@@ -92,8 +92,9 @@ impl FromStr for Action {
                 .ok_or("Missing monitor")?,
             button: s
                 .next()
-                .and_then(|s| s.parse().ok())
-                .ok_or("Missing button")?,
+                .and_then(|s| s.parse::<u8>().ok())
+                .ok_or("Missing button")?
+                .into(),
         })
     }
 }
@@ -103,7 +104,7 @@ impl Display for Action {
         write!(
             f,
             "{}-{}-{}-{}",
-            self.id.0 as u8, self.id.1, self.monitor, self.button as u8
+            self.id.0 as u8, self.id.1, self.monitor, self.button
         )
     }
 }

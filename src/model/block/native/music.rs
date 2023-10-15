@@ -101,7 +101,7 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
             OwnedLibMpvEvent::PropertyChange { name, change, .. } => match name.as_str() {
                 "playlist-pos" => {
                     bar_data.send_if_modified(|data| {
-                        let Some(data) = data.as_mut()  else {
+                        let Some(data) = data.as_mut() else {
                             return false;
                         };
                         let get_state = |data: &BarData| data.title.chapter.is_some();
@@ -113,7 +113,7 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
                 }
                 "media-title" => {
                     let Ok(title) = change.into_string() else {
-                         continue;
+                        continue;
                     };
                     bar_data.send_if_modified(|data| update_title(data, title, player_index));
                 }
@@ -139,7 +139,7 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
                     };
 
                     let Ok(title) = title.into_string() else {
-                         continue;
+                        continue;
                     };
                     bar_data.send_if_modified(|data| update_chapter(data, title, player_index));
                 }
@@ -306,7 +306,7 @@ impl Display for Title {
             }
         }
         let Some(media_title) = &self.media_title else {
-            return Ok(())
+            return Ok(());
         };
         match &self.chapter {
             Some(chapter) => {

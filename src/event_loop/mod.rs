@@ -3,7 +3,7 @@ pub mod signal_task;
 pub mod update_channel;
 
 use crate::{
-    display::DisplayBlock,
+    display::{display_block, Bar},
     global_config,
     model::{
         block::{BlockId, BlockUpdate},
@@ -13,8 +13,6 @@ use crate::{
 use enum_iterator::IntoEnumIterator;
 use std::{
     ffi::OsStr,
-    fmt::Write,
-    iter::successors,
     process::Stdio,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -29,24 +27,30 @@ use tokio::{
 
 #[derive(Debug, Clone, Copy)]
 pub enum MouseButton {
-    Left = 0,
-    Middle = 1,
-    Right = 2,
-    ScrollUp = 3,
-    ScrollDown = 4,
+    Left = 1,
+    Middle = 2,
+    Right = 3,
+    ScrollUp = 4,
+    ScrollDown = 5,
 }
 
 impl From<u8> for MouseButton {
     fn from(x: u8) -> Self {
         use MouseButton::*;
         match x {
-            0 => Left,
-            1 => Middle,
-            2 => Right,
-            3 => ScrollUp,
-            4 => ScrollDown,
-            _ => unreachable!("Invalid mouse button number (> 4) {}", x),
+            1 => Left,
+            2 => Middle,
+            3 => Right,
+            4 => ScrollUp,
+            5 => ScrollDown,
+            _ => unreachable!("Invalid mouse button number (must be inside 1..=5) {}", x),
         }
+    }
+}
+
+impl std::fmt::Display for MouseButton {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self as u8)
     }
 }
 
@@ -87,11 +91,13 @@ pub fn current_layer() -> u16 {
     CURRENT_LAYER.load(Ordering::Acquire)
 }
 
-pub async fn start_event_loop(
+pub async fn start_event_loop<B>(
     mut config: Config<'static>,
     events: broadcast::Sender<Event>,
     mut updates: mpsc::Receiver<BlockUpdate>,
-) {
+) where
+    B: Bar<String>,
+{
     let global_config = crate::global_config::get();
     let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.bars_geometries.is_empty() {
         let (bar, lemon_inputs, lemon_outputs) = spawn_bar(&global_config.to_arg_list(None));
@@ -117,7 +123,7 @@ pub async fn start_event_loop(
         config.update(update);
         match lemon_inputs.get_mut(monitor as usize) {
             Some(input) => {
-                build_line(&config, monitor, &mut line);
+                line = build_line::<B>(&config, monitor, line);
                 debug(&line, &up, (al, index));
                 if let Err(e) = input.write_all(line.as_bytes()).await {
                     log::error!("Couldn't talk to lemon bar :( {:?}", e);
@@ -125,7 +131,7 @@ pub async fn start_event_loop(
             }
             None => {
                 for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
-                    build_line(&config, monitor as _, &mut line);
+                    line = build_line::<B>(&config, monitor as _, line);
                     debug(&line, &up, (al, index));
                     if let Err(e) = input.write_all(line.as_bytes()).await {
                         log::error!("Couldn't talk to lemon bar :( {:?}", e);
@@ -139,31 +145,30 @@ pub async fn start_event_loop(
     }
 }
 
-fn build_line(config: &Config, monitor: u8, line: &mut String) {
+fn build_line<B>(config: &Config, monitor: u8, mut line: String) -> String
+where
+    B: Bar<String>,
+{
     line.clear();
     let global_config = global_config::get();
     let current_layer = current_layer();
+    let mut bar = B::new(line, global_config.separator);
     Alignment::into_enum_iter()
         .map(|a| (a, &config[a]))
         .filter(|(_, c)| !c.is_empty())
         .for_each(|(al, blocks)| {
-            line.push_str(al.to_lemon());
+            bar.set_alignment(al).unwrap();
             blocks
                 .iter()
                 .enumerate()
                 .filter(|(_, b)| !b.last_run[monitor].is_empty())
                 .filter(|(_, b)| b.layer == current_layer)
-                .map(|(index, b)| DisplayBlock(b, index, monitor))
-                .zip(successors(Some(None), |_| Some(global_config.separator)))
-                .for_each(|(b, s)| {
-                    if let Some(s) = s {
-                        line.push_str(s)
-                    }
-                    write!(line, "{}", b).unwrap();
-                });
+                .for_each(|(index, b)| display_block(&mut bar, b, index, monitor).unwrap());
         });
     // TODO: line.lemon('O', tray_offset).unwrap();
+    let mut line = bar.into_inner();
     line.push('\n');
+    line
 }
 
 #[inline(always)]

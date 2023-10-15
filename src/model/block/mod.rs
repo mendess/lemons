@@ -157,7 +157,7 @@ pub struct AvailableActions(u8);
 
 impl AvailableActions {
     pub fn set(&mut self, index: u8) {
-        debug_assert!(index < 5);
+        debug_assert!(index < 6);
         self.0 |= 1u8 << index;
     }
 
@@ -169,7 +169,10 @@ impl AvailableActions {
         }
     }
 
-    pub fn iter(self) -> impl Iterator<Item = u8> {
-        (0..5).filter(move |i| self.0 & (1 << i) != 0)
+    pub fn iter(self) -> impl Iterator<Item = MouseButton> {
+        (0..5)
+            .filter(move |i| self.0 & (1 << i) != 0)
+            .map(|i| i + 1)
+            .map(Into::into)
     }
 }

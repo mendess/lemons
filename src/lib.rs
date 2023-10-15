@@ -1,4 +1,4 @@
-mod display;
+pub mod display;
 pub mod event_loop;
 pub mod model;
 pub mod parsing;

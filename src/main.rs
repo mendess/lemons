@@ -1,5 +1,5 @@
 use enum_iterator::IntoEnumIterator;
-use lemon::{event_loop, model::Alignment, parsing::parse};
+use lemon::{display::Lemonbar, event_loop, model::Alignment, parsing::parse};
 use std::{env, fs, io, path::PathBuf};
 use structopt::StructOpt;
 use tokio::sync::{broadcast, mpsc};
@@ -81,6 +81,6 @@ async fn main() -> io::Result<()> {
     } else {
         drop(bc_recv);
     }
-    event_loop::start_event_loop(blocks, bc_send, mpsc_recv).await;
+    event_loop::start_event_loop::<Lemonbar<_>>(blocks, bc_send, mpsc_recv).await;
     Ok(())
 }
