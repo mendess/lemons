@@ -1,24 +1,19 @@
-#[derive(Clone, Copy, Debug)]
-pub struct Color<'a>(pub &'a str);
+use crate::display::implementations::DisplayColor;
 
-impl Default for Color<'static> {
-    fn default() -> Self {
-        Color("-")
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: Option<u8>,
 }
 
-impl<'a> Color<'a> {
+impl Color {
     pub fn has_transparency(&self) -> bool {
-        self.0.len() == "#aaFFFFFF".len()
+        self.a.is_some()
     }
 
-    pub fn tint(&self) -> &str {
-        let start = self.has_transparency() as usize * 2 + 1;
-        &self.0[start..]
-    }
-
-    pub fn transparency(&self) -> Option<u8> {
-        self.has_transparency()
-            .then(|| u8::from_str_radix(&self.0[1..3], 16).unwrap())
+    pub fn to_code(&self) -> String {
+        DisplayColor::lemonbar(*self).to_string()
     }
 }

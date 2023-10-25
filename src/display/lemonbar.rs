@@ -1,6 +1,8 @@
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
-use super::CmdlineArgBuilder;
+use crate::model::Color;
+
+use super::{implementations::DisplayColor, CmdlineArgBuilder};
 
 pub struct Lemonbar<W> {
     sink: W,
@@ -31,6 +33,10 @@ impl Default for LemonArgs {
     }
 }
 
+fn show_c(color: &Color) -> DisplayColor {
+    DisplayColor::lemonbar(*color)
+}
+
 impl CmdlineArgBuilder for LemonArgs {
     fn output(&mut self, name: &str) {
         self.outputs
@@ -58,16 +64,16 @@ impl CmdlineArgBuilder for LemonArgs {
         self.args.extend(["-u".into(), width.to_string()])
     }
 
-    fn underline_color(&mut self, color: &crate::model::Color<'_>) {
-        self.args.extend(["-U".into(), color.to_string()])
+    fn underline_color(&mut self, color: &Color) {
+        self.args.extend(["-U".into(), show_c(color).to_string()])
     }
 
-    fn background(&mut self, color: &crate::model::Color<'_>) {
-        self.args.extend(["-B".into(), color.to_string()])
+    fn background(&mut self, color: &Color) {
+        self.args.extend(["-B".into(), show_c(color).to_string()])
     }
 
-    fn foreground(&mut self, color: &crate::model::Color<'_>) {
-        self.args.extend(["-F".into(), color.to_string()])
+    fn foreground(&mut self, color: &Color) {
+        self.args.extend(["-F".into(), show_c(color).to_string()])
     }
 
     fn finish(mut self) -> Vec<String> {
@@ -168,19 +174,19 @@ where
         self.write('O', offset.0)
     }
 
-    fn bg(&mut self, color: &crate::model::Color<'_>) -> fmt::Result {
+    fn bg(&mut self, color: &Color) -> fmt::Result {
         self.bg = true;
-        self.write('B', color)
+        self.write('B', show_c(color))
     }
 
-    fn fg(&mut self, color: &crate::model::Color<'_>) -> fmt::Result {
+    fn fg(&mut self, color: &Color) -> fmt::Result {
         self.fg = true;
-        self.write('F', color)
+        self.write('F', show_c(color))
     }
 
-    fn underline(&mut self, color: &crate::model::Color<'_>) -> fmt::Result {
+    fn underline(&mut self, color: &Color) -> fmt::Result {
         self.underline = true;
-        self.write('U', color)?;
+        self.write('U', show_c(color))?;
         self.bar.sink.write_str("%{+u}")
     }
 
@@ -198,8 +204,19 @@ where
         )
     }
 
-    fn text(&mut self, body: &str) -> fmt::Result {
-        self.bar.sink.write_str(body)
+    fn text(&mut self, body: &str, raw: bool) -> fmt::Result {
+        let body = if raw {
+            if body.ends_with('%') {
+                Cow::Owned(format!("{}%", body))
+            } else {
+                Cow::Borrowed(body)
+            }
+        } else if body.contains('%') {
+            Cow::Owned(body.replace('%', "%%"))
+        } else {
+            Cow::Borrowed(body)
+        };
+        self.bar.sink.write_str(&body)
     }
 
     fn finish(mut self) -> fmt::Result {

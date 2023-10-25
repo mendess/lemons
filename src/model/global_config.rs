@@ -1,11 +1,17 @@
 use super::Color;
 use crate::{
-    display::{Bar, CmdlineArgBuilder},
+    display::{Bar, CmdlineArgBuilder, Program},
     util::number_as_str,
 };
 use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, iter::once, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+    iter::once,
+    sync::Arc,
+};
 
 pub static GLOBAL_CONFIG: Lazy<ArcSwap<GlobalConfig<'static>>> =
     Lazy::new(|| ArcSwap::from_pointee(Default::default()));
@@ -26,13 +32,14 @@ pub struct GlobalConfig<'a> {
     pub fonts: Vec<&'a str>,
     pub name: Option<&'a str>,
     pub underline_width: Option<u32>,
-    pub background: Option<Color<'a>>,
-    pub foreground: Option<Color<'a>>,
-    pub underline: Option<Color<'a>>,
+    pub background: Option<Color>,
+    pub foreground: Option<Color>,
+    pub underline: Option<Color>,
     pub separator: Option<&'a str>,
     pub tray: bool,
     pub n_layers: u16,
-    colors: HashMap<&'a str, (String, Color<'a>)>,
+    colors: HashMap<&'a str, (String, Color)>,
+    pub program: Program,
 }
 
 impl<'a> GlobalConfig<'a> {
@@ -70,22 +77,43 @@ impl<'a> GlobalConfig<'a> {
         arg_builder.finish()
     }
 
-    pub fn get_color<'s>(&'s self, name: &str) -> Option<&'s Color<'a>> {
+    pub fn get_color<'s>(&'s self, name: &str) -> Option<&'s Color> {
         self.colors.get(name).map(|x| &x.1)
     }
 
-    pub fn set_color(&mut self, name: &'a str, value: Color<'a>) -> Option<Color<'a>> {
+    pub fn set_color(&mut self, name: &'a str, value: Color) -> Option<Color> {
         let env_var = format!("LEMON_{}", name.to_uppercase());
         self.colors.insert(name, (env_var, value)).map(|x| x.1)
     }
 
-    pub fn as_env_vars(&self, monitor: u8, layer: u16) -> impl Iterator<Item = (&str, &str)> {
-        let color = |c: &Option<Color<'a>>| c.map(|c| c.0).unwrap_or("");
+    pub fn as_env_vars(
+        &self,
+        monitor: u8,
+        layer: u16,
+    ) -> impl Iterator<Item = (&str, Cow<'_, OsStr>)> {
+        let color = |c: &Option<Color>| {
+            c.map(|c| Cow::Owned(OsString::from(c.to_code())))
+                .unwrap_or(Cow::Borrowed(OsStr::new("")))
+        };
         once(("LEMON_BG", color(&self.background)))
             .chain(once(("LEMON_FG", color(&self.foreground))))
             .chain(once(("LEMON_UN", color(&self.underline))))
-            .chain(once(("LEMON_MONITOR", number_as_str(monitor))))
-            .chain(once(("LEMON_LAYER", number_as_str(layer as u8))))
-            .chain(self.colors.iter().map(|(_, (k, v))| (k.as_str(), v.0)))
+            .chain(once((
+                "LEMON_MONITOR",
+                Cow::Borrowed(number_as_str(monitor).as_ref()),
+            )))
+            .chain(once((
+                "LEMON_LAYER",
+                Cow::Borrowed(number_as_str(layer as u8).as_ref()),
+            )))
+            .chain(
+                self.colors
+                    .iter()
+                    .map(|(_, (k, v))| (k.as_str(), Cow::Owned(v.to_code().into()))),
+            )
+            .chain(once((
+                "LEMON_PROGRAM",
+                Cow::Owned(self.program.as_str().into()),
+            )))
     }
 }

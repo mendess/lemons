@@ -1,5 +1,10 @@
 use super::super::{BlockId, BlockTask, TaskData};
-use crate::event_loop::{current_layer, Event, MouseButton};
+use crate::{
+    display::implementations::DisplayColor,
+    event_loop::{current_layer, Event, MouseButton},
+    global_config,
+    model::Color,
+};
 use futures::stream::StreamExt;
 use mlib::players::{
     self,
@@ -320,7 +325,15 @@ impl Display for Title {
                     el,
                     c,
                     el1,
-                    blue = g.get_color("blue").map(|c| c.0).unwrap_or("#5498F8"),
+                    blue = DisplayColor::new(
+                        g.get_color("blue").copied().unwrap_or(Color {
+                            r: 0x54,
+                            g: 0x98,
+                            b: 0xF8,
+                            a: None,
+                        }),
+                        global_config::get().program,
+                    ),
                 )
             }
             None => {

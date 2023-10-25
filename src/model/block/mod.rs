@@ -17,6 +17,7 @@ use std::{
 };
 use tokio::sync::broadcast;
 
+#[derive(Debug)]
 pub struct BlockUpdate {
     text: String,
     alignment: Alignment,
@@ -129,11 +130,11 @@ impl<'a> TryFrom<&'a str> for Offset<'a> {
 #[builder(setter(strip_option))]
 pub struct Block<'a> {
     #[builder(default)]
-    pub bg: Option<Color<'a>>,
+    pub bg: Option<Color>,
     #[builder(default)]
-    pub fg: Option<Color<'a>>,
+    pub fg: Option<Color>,
     #[builder(default)]
-    pub un: Option<Color<'a>>,
+    pub un: Option<Color>,
     #[builder(default)]
     pub font: Option<Font<'a>>, // 1-infinity index or '-'
     #[builder(default)]

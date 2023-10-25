@@ -1,9 +1,27 @@
 use crate::model::{Alignment, Color};
 use std::fmt::{self, Display};
 
-impl<'a> Display for Color<'a> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "{}", self.0)
+use super::Program;
+
+pub struct DisplayColor(Color, Program);
+
+impl DisplayColor {
+    pub fn new(color: Color, program: Program) -> Self {
+        Self(color, program)
+    }
+
+    pub fn lemonbar(color: Color) -> Self {
+        Self(color, Program::Lemonbar)
+    }
+}
+
+impl Display for DisplayColor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Color { r, g, b, a } = self.0;
+        match (self.1, a) {
+            (Program::Lemonbar, Some(a)) => write!(f, "#{a:02X}{r:02X}{g:02X}{b:02X}"),
+            (Program::Lemonbar, None) => write!(f, "#{r:02X}{g:02X}{b:02X}"),
+        }
     }
 }
 
