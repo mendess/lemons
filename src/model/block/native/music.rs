@@ -265,7 +265,7 @@ struct Title {
 impl Title {
     async fn fetch() -> Result<Title, players::Error> {
         let media_title = players::media_title().await?;
-        if let Ok(chmeta) = players::chapter_metadata().await {
+        if let Ok(Some(chmeta)) = players::chapter_metadata().await {
             Ok(Title {
                 media_title: Some(media_title),
                 chapter: Some(chmeta.title),
