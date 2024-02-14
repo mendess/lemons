@@ -132,7 +132,7 @@ impl BlockTask for HyprLand {
                         if let WorkspaceType::Regular(ws_name) = ws {
                             let mut state = state.lock().await;
                             if let Some(ws) = state.find_ws_by_name(&ws_name) {
-                                state.focused_ws = Some(ws.id);
+                                state.visible_ws = Some(ws.id);
                             }
                             if let Err(e) = state.emit().await {
                                 log::error!("failed to emit event: {e:?}");
@@ -181,7 +181,7 @@ struct Ws {
 
 struct Monitor {
     ws: Vec<Ws>,
-    focused_ws: Option<WorkspaceId>,
+    visible_ws: Option<WorkspaceId>,
     is_focused: bool,
 
     sender: UpdateChannel,
@@ -207,24 +207,16 @@ impl Monitor {
             })
             .collect::<Vec<_>>();
 
-        let mut focused = None;
         for c in clients {
             let Some(w) = ws.iter_mut().find(|w| w.id == c.workspace.id) else {
                 continue;
             };
             w.windows.push(c.address);
-            if let Some((hist, _)) = focused {
-                if hist > c.focus_history_id {
-                    focused = Some((c.focus_history_id, c.workspace.id))
-                }
-            } else {
-                focused = Some((c.focus_history_id, c.workspace.id));
-            }
         }
 
         Ok(Self {
+            visible_ws: ws.first().map(|w| w.id),
             ws,
-            focused_ws: focused.map(|(_, id)| id),
             is_focused: active_monitor.id == i128::from(monitor),
             sender,
             block_id,
@@ -275,16 +267,34 @@ impl Monitor {
         let mut text = String::new();
         for w in &self.ws {
             let mut block = ZelbarDisplayBlock::new_raw(&mut text);
-            if Some(w.id) == self.focused_ws {
-                block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
-            } else {
-                block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
+            match (self.visible_ws, self.is_focused) {
+                // visible and focused
+                (Some(wid), true) if wid == w.id => {
+                    block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
+                    block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
+                }
+                // visible but not focused
+                (Some(wid), false) if wid == w.id => {
+                    block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
+                    block.bg(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
+                }
+                // not visible
+                (_, _) => {
+                    block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
+                    block.underline(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
+                }
             }
             block.text(" ", false)?;
             block.text(&w.name, false)?;
             block.text(" ", false)?;
             block.finish()?;
+        }
+        if log::max_level() >= log::Level::Info {
+            log::info!(
+                "{:?} => {:?}",
+                self.ws.iter().map(|w| w.id).collect::<Vec<_>>(),
+                self.visible_ws
+            );
         }
         self.sender
             .send(crate::model::block::BlockUpdate {
