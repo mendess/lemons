@@ -1,4 +1,4 @@
-use std::num::NonZeroU8;
+use std::{num::NonZeroU8, ops::RangeInclusive};
 
 use crate::util::one_or_more::OneOrMore;
 
@@ -21,7 +21,15 @@ impl ActiveMonitors {
         }
     }
 
-    pub fn iter(self) -> impl Iterator<Item = u8> {
+    pub fn iter(&self) -> impl Iterator<Item = u8> {
+        self.into_iter()
+    }
+}
+
+impl IntoIterator for ActiveMonitors {
+    type IntoIter = RangeInclusive<u8>;
+    type Item = u8;
+    fn into_iter(self) -> Self::IntoIter {
         match self {
             Self::All => u8::MAX..=u8::MAX,
             Self::MonitorCount(m) => 0..=(m.get() - 1),

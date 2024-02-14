@@ -1,6 +1,6 @@
 pub mod implementations;
 mod lemonbar;
-mod zelbar;
+pub mod zelbar;
 
 use std::{fmt, str::FromStr};
 

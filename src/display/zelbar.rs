@@ -119,13 +119,17 @@ impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
     }
 }
 
-pub struct ZelbarDisplayBlock<'bar, W> {
-    bar: &'bar mut Zelbar<W>,
+pub struct ZelbarDisplayBlock<'sink, W> {
+    sink: &'sink mut W,
 }
 
-impl<'bar, W> ZelbarDisplayBlock<'bar, W> {
-    fn new(bar: &'bar mut Zelbar<W>) -> Self {
-        Self { bar }
+impl<'sink, W> ZelbarDisplayBlock<'sink, W> {
+    fn new(bar: &'sink mut Zelbar<W>) -> Self {
+        Self { sink: &mut bar.sink }
+    }
+
+    pub fn new_raw(sink: &'sink mut W) -> Self {
+        Self { sink }
     }
 }
 
@@ -138,7 +142,7 @@ where
         P: fmt::Display,
         S: fmt::Display,
     {
-        write!(self.bar.sink, "%{{{}:{}}}", prefix, s)
+        write!(self.sink, "%{{{}:{}}}", prefix, s)
     }
 }
 
@@ -168,7 +172,7 @@ where
 
     fn add_action(&mut self, action: crate::event_loop::action_task::Action) -> fmt::Result {
         write!(
-            self.bar.sink,
+            self.sink,
             "%{{A{button}:{action}}}",
             button = action.button,
         )
@@ -180,7 +184,7 @@ where
         } else {
             Cow::Borrowed(body)
         };
-        self.bar.sink.write_str(&body)
+        self.sink.write_str(&body)
     }
 
     fn finish(self) -> fmt::Result {

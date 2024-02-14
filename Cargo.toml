@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.2.0"
+version = "4.3.0"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
@@ -38,3 +38,11 @@ rev = "bbef279f2f1c5beea70c5f9003c82961faa22a86"
 version = "1"
 features = [ "sync", "rt", "rt-multi-thread", "net", "signal", "process", "time", "macros", "io-util", "io-std" ]
 
+[dependencies.hyprland]
+git = "https://github.com/mendess/hyprland-rs"
+branch = "mendess/workspace-rename-event"
+optional = true
+
+[features]
+default = ["hyprland"]
+hyprland = ["dep:hyprland"]

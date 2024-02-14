@@ -131,12 +131,14 @@ pub async fn start_event_loop<B>(
     let mut line = String::new();
     while let Some(update) = updates.recv().await {
         let (al, index, monitor) = update.id();
-        let up = update.as_str().to_owned();
-        config.update(update);
+        if !config.update(&update) {
+            continue;
+        }
+        log::debug!("bar update '{}' from {:?}", update.as_str(), (al, index));
         match lemon_inputs.get_mut(monitor as usize) {
             Some(input) => {
                 line = build_line::<B>(&config, monitor, line);
-                debug(&line, &up, (al, index));
+                log::trace!("{monitor} => {line}");
                 if let Err(e) = input.write_all(line.as_bytes()).await {
                     log::error!("Couldn't talk to lemon bar :( {:?}", e);
                 }
@@ -144,7 +146,7 @@ pub async fn start_event_loop<B>(
             None => {
                 for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
                     line = build_line::<B>(&config, monitor as _, line);
-                    debug(&line, &up, (al, index));
+                    log::trace!("{monitor} => {line}");
                     if let Err(e) = input.write_all(line.as_bytes()).await {
                         log::error!("Couldn't talk to lemon bar :( {:?}", e);
                     }
@@ -184,15 +186,4 @@ where
     let mut line = bar.into_inner();
     line.push('\n');
     line
-}
-
-#[inline(always)]
-pub fn debug(line: &str, up: &str, bid: (Alignment, usize)) {
-    log::trace!("[{:?}] {}", chrono::Utc::now(), line);
-    log::debug!(
-        "[{:?}] bar update '{}' from {:?}",
-        chrono::Utc::now(),
-        up,
-        bid
-    );
 }
