@@ -47,6 +47,10 @@ impl BlockUpdate {
         &mut self.text
     }
 
+    pub fn text(&self) -> &String {
+        &self.text
+    }
+
     pub fn into_text(self) -> String {
         self.text
     }

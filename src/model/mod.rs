@@ -30,9 +30,16 @@ impl<'a> IndexMut<Alignment> for Config<'a> {
 }
 
 impl<'a> Config<'a> {
-    pub fn update(&mut self, update: block::BlockUpdate) {
+    pub fn update(&mut self, update: &block::BlockUpdate) -> bool {
         let (alignment, index, monitor) = update.id();
-        self[alignment][index].last_run[monitor].clone_from(&update.into_text())
+        let block = &mut self[alignment][index].last_run[monitor];
+        let new_block = update.text();
+        if block != new_block {
+            block.clone_from(&new_block);
+            true
+        } else {
+            false
+        }
     }
 }
 
