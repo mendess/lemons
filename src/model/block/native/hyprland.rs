@@ -237,22 +237,23 @@ impl Monitor {
     async fn find_ws_by_name_or_create(&mut self, name: &str) -> hyprland::Result<Option<&mut Ws>> {
         match self.ws.iter().position(|ws| ws.name == name) {
             Some(idx) => return Ok(self.ws.get_mut(idx)),
-            None if self.is_focused => {
-                let w = match Workspaces::get_async().await?.find(|w| w.name == name) {
-                    Some(w) => w,
-                    None => return Ok(None),
+            None => {
+                let Some(new_ws) = Workspaces::get_async().await?.find(|w| w.name == name) else {
+                    return Ok(None);
                 };
-                let id = w.id;
-                self.ws.push(Ws {
-                    id: w.id,
-                    name: w.name,
-                    urgent: false,
-                    windows: Default::default(),
-                });
-                self.ws.sort_by_key(|w| w.id);
-                Ok(self.ws.iter_mut().rfind(|w| w.id == id))
+                if new_ws.monitor_id == self.monitor {
+                    self.ws.push(Ws {
+                        id: new_ws.id,
+                        name: new_ws.name,
+                        urgent: false,
+                        windows: Default::default(),
+                    });
+                    self.ws.sort_by_key(|w| w.id);
+                    Ok(self.ws.iter_mut().rfind(|w| w.id == new_ws.id))
+                } else {
+                    Ok(None)
+                }
             }
-            None => Ok(None),
         }
     }
 
@@ -267,26 +268,31 @@ impl Monitor {
         let mut text = String::new();
         for w in &self.ws {
             let mut block = ZelbarDisplayBlock::new_raw(&mut text);
-            match (self.visible_ws, self.is_focused) {
-                // visible and on focused monitor
-                (Some(wid), true) if wid == w.id => {
-                    block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                    block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
-                }
-                // visible but not on focused monitor
-                (Some(wid), false) if wid == w.id => {
-                    block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                    block.bg(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
-                }
-                // not visible on focused monitor
-                (_, true) => {
-                    block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
-                    block.underline(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
-                }
-                // not visible and not on focused monitor
-                (_, false) => {
-                    block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
-                    block.underline(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
+            if w.urgent {
+                block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
+                block.bg(global_conf.get_color("red").unwrap_or(&Color::RED))?;
+            } else {
+                match (self.visible_ws, self.is_focused) {
+                    // visible and on focused monitor
+                    (Some(wid), true) if wid == w.id => {
+                        block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
+                        block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
+                    }
+                    // visible but not on focused monitor
+                    (Some(wid), false) if wid == w.id => {
+                        block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
+                        block.bg(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
+                    }
+                    // not visible on focused monitor
+                    (_, true) => {
+                        block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
+                        block.underline(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
+                    }
+                    // not visible and not on focused monitor
+                    (_, false) => {
+                        block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
+                        block.underline(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
+                    }
                 }
             }
             block.text(" ", false)?;
