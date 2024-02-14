@@ -268,20 +268,25 @@ impl Monitor {
         for w in &self.ws {
             let mut block = ZelbarDisplayBlock::new_raw(&mut text);
             match (self.visible_ws, self.is_focused) {
-                // visible and focused
+                // visible and on focused monitor
                 (Some(wid), true) if wid == w.id => {
                     block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
                     block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
                 }
-                // visible but not focused
+                // visible but not on focused monitor
                 (Some(wid), false) if wid == w.id => {
                     block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
                     block.bg(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
                 }
-                // not visible
-                (_, _) => {
+                // not visible on focused monitor
+                (_, true) => {
                     block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
                     block.underline(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
+                }
+                // not visible and not on focused monitor
+                (_, false) => {
+                    block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
+                    block.underline(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
                 }
             }
             block.text(" ", false)?;
