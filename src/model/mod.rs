@@ -35,7 +35,7 @@ impl<'a> Config<'a> {
         let block = &mut self[alignment][index].last_run[monitor];
         let new_block = update.text();
         if block != new_block {
-            block.clone_from(&new_block);
+            block.clone_from(new_block);
             true
         } else {
             false

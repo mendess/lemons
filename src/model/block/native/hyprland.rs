@@ -5,7 +5,7 @@ use futures::{future::BoxFuture, FutureExt};
 use hyprland::{
     data::{Clients, Workspaces},
     event_listener::{
-        AsyncEventListener, MonitorEventData, WindowMoveEvent, WindowOpenEvent,
+        AsyncEventListener, MonitorEventData, WindowEventData, WindowMoveEvent, WindowOpenEvent,
         WorkspaceRenameEventData,
     },
     shared::{Address, HyprData, HyprDataActive, WorkspaceId, WorkspaceType},
@@ -51,9 +51,26 @@ impl BlockTask for HyprLand {
                     &state,
                     |state, address: Address| async move {
                         let mut state = state.lock().await;
-                        if let Some(ws) = state.find_ws_containing(&address) {
-                            ws.urgent = true;
+                        let Some(ws) = state.find_window(&address) else {
+                            return;
                         };
+                        ws.urgent = true;
+                        if let Err(e) = state.emit().await {
+                            log::error!("failed to emit event: {e:?}");
+                        };
+                    },
+                ));
+                listener.add_active_window_change_handler(handler(
+                    &state,
+                    |state, event: Option<WindowEventData>| async move {
+                        let mut state = state.lock().await;
+                        let Some(event) = event else {
+                            return;
+                        };
+                        let Some(w) = state.find_window(&event.window_address) else {
+                            return;
+                        };
+                        w.urgent = false;
                         if let Err(e) = state.emit().await {
                             log::error!("failed to emit event: {e:?}");
                         };
@@ -64,7 +81,7 @@ impl BlockTask for HyprLand {
                     |state, open_event: WindowOpenEvent| async move {
                         let mut state = state.lock().await;
                         if let Some(ws) = state.find_ws_by_name(&open_event.workspace_name) {
-                            ws.windows.push(open_event.window_address);
+                            ws.windows.push(open_event.window_address.into());
                         }
                         if let Err(e) = state.emit().await {
                             log::error!("failed to emit event: {e:?}");
@@ -80,7 +97,7 @@ impl BlockTask for HyprLand {
                             .find_ws_by_name_or_create(&move_event.workspace_name)
                             .await
                         {
-                            Ok(Some(w)) => w.windows.push(move_event.window_address),
+                            Ok(Some(w)) => w.windows.push(move_event.window_address.into()),
                             Ok(None) => {}
                             Err(e) => log::error!("failed to create target ws: {e:?}"),
                         }
@@ -172,11 +189,25 @@ impl BlockTask for HyprLand {
 }
 
 #[derive(Debug)]
+struct Window {
+    addr: Address,
+    urgent: bool,
+}
+
+impl From<Address> for Window {
+    fn from(addr: Address) -> Self {
+        Self {
+            addr,
+            urgent: false,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct Ws {
     id: WorkspaceId,
     name: String,
-    urgent: bool,
-    windows: Vec<Address>,
+    windows: Vec<Window>,
 }
 
 struct Monitor {
@@ -202,7 +233,6 @@ impl Monitor {
             .map(|w| Ws {
                 id: w.id,
                 name: w.name,
-                urgent: false,
                 windows: Default::default(),
             })
             .collect::<Vec<_>>();
@@ -211,8 +241,13 @@ impl Monitor {
             let Some(w) = ws.iter_mut().find(|w| w.id == c.workspace.id) else {
                 continue;
             };
-            w.windows.push(c.address);
+            w.windows.push(Window {
+                addr: c.address,
+                urgent: false,
+            });
         }
+
+        ws.sort_by_key(|w| w.id);
 
         Ok(Self {
             visible_ws: ws.first().map(|w| w.id),
@@ -224,10 +259,11 @@ impl Monitor {
         })
     }
 
-    fn find_ws_containing(&mut self, addr: &Address) -> Option<&mut Ws> {
+    fn find_window(&mut self, addr: &Address) -> Option<&mut Window> {
         self.ws
             .iter_mut()
-            .find(|ws| ws.windows.iter().any(|w| w == addr))
+            .flat_map(|ws| ws.windows.iter_mut())
+            .find(|w| w.addr == *addr)
     }
 
     fn find_ws_by_name(&mut self, name: &str) -> Option<&mut Ws> {
@@ -245,7 +281,6 @@ impl Monitor {
                     self.ws.push(Ws {
                         id: new_ws.id,
                         name: new_ws.name,
-                        urgent: false,
                         windows: Default::default(),
                     });
                     self.ws.sort_by_key(|w| w.id);
@@ -260,7 +295,7 @@ impl Monitor {
     fn remove_window(&mut self, addr: &Address) {
         self.ws
             .iter_mut()
-            .for_each(|w| w.windows.retain(|w_addr| w_addr != addr));
+            .for_each(|w| w.windows.retain(|w| w.addr != *addr));
     }
 
     async fn emit(&self) -> fmt::Result {
@@ -268,7 +303,7 @@ impl Monitor {
         let mut text = String::new();
         for w in &self.ws {
             let mut block = ZelbarDisplayBlock::new_raw(&mut text);
-            if w.urgent {
+            if w.windows.iter().any(|w| w.urgent) {
                 block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
                 block.bg(global_conf.get_color("red").unwrap_or(&Color::RED))?;
             } else {
