@@ -1,4 +1,17 @@
 #![allow(dead_code)]
+#![allow(unstable_name_collisions)] // split_at_checked
+
+trait StrExt {
+    fn split_at_checked(self, at: usize) -> Option<(Self, Self)>
+    where
+        Self: Sized;
+}
+
+impl<'s> StrExt for &'s str {
+    fn split_at_checked(self, at: usize) -> Option<(Self, Self)> {
+        Some((self.get(0..at)?, self.get(at..)?))
+    }
+}
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct Color {
@@ -11,19 +24,18 @@ pub struct Color {
 impl Color {
     fn parse(s: &str) -> Option<(Self, &str)> {
         fn p(s: &str) -> Option<(u8, u8, u8, Option<u8>, &str)> {
-            let (h0, rest) = s.split_at(2);
+            let (h0, s) = s.split_at_checked(2)?;
             let h0 = u8::from_str_radix(h0, 16).ok()?;
-            let (h1, rest) = rest.split_at(2);
+            let (h1, s) = s.split_at_checked(2)?;
             let h1 = u8::from_str_radix(h1, 16).ok()?;
-            let (h2, rest) = rest.split_at(2);
+            let (h2, s) = s.split_at_checked(2)?;
             let h2 = u8::from_str_radix(h2, 16).ok()?;
-            if rest.len() > 1 {
-                let (h3, rest_) = rest.split_at(2);
+            if let Some((h3, s)) = s.split_at_checked(2) {
                 if let Ok(h3) = u8::from_str_radix(h3, 16) {
-                    return Some((h0, h1, h2, Some(h3), rest_));
+                    return Some((h0, h1, h2, Some(h3), s));
                 }
             }
-            Some((h0, h1, h2, None, rest))
+            Some((h0, h1, h2, None, s))
         }
         if let Some(s) = s.strip_prefix('#') {
             // lemonbar
@@ -75,24 +87,6 @@ impl Alignment {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block<'s> {
-    pub alignment: Alignment,
-    pub fg: Option<Color>,
-    pub bg: Option<Color>,
-    pub ul: Option<Color>,
-    pub actions: [Option<&'s str>; 5],
-    pub t: &'s str,
-}
-
-struct Parser<'s> {
-    last_alignment: Alignment,
-    s: &'s str,
-}
-
-#[derive(Debug, Default)]
-pub struct ParserError;
-
 fn parse_color_attr<'s>(s: &'s str, attr: &'static str) -> Option<(Color, &'s str)> {
     let s = s.strip_prefix("%{")?;
     let s = s.strip_prefix(attr)?;
@@ -122,42 +116,108 @@ fn parse_action(s: &str) -> Option<(usize, &str, &str)> {
     Some((idx, action, s))
 }
 
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Block<'s> {
+    pub alignment: Alignment,
+    pub fg: Option<Color>,
+    pub bg: Option<Color>,
+    pub ul: Option<Color>,
+    pub actions: [Option<&'s str>; 5],
+    pub t: &'s str,
+}
+
+impl<'s> Block<'s> {
+    fn parse(mut s: &'s str) -> Option<(Self, &'s str)> {
+        let mut block = Block::default();
+        #[cfg(any(test, fuzzing))]
+        let mut i = 0;
+        #[cfg(any(test, fuzzing))]
+        let original_str = s;
+        loop {
+            #[cfg(any(test, fuzzing))]
+            {
+                assert_ne!(
+                    i, 4096,
+                    "infinite loop detected.
+input was {original_str:?}
+looping body was {:?}",
+                    s
+                );
+                i += 1;
+            }
+            if let Some((attr, rest)) = Attribute::parse(s) {
+                s = rest;
+                match attr {
+                    Attribute::Alignment(al) => block.alignment = al,
+                    Attribute::Fg(fg) => block.fg = Some(fg),
+                    Attribute::Bg(bg) => block.bg = Some(bg),
+                    Attribute::Ul(ul) => block.ul = Some(ul),
+                    Attribute::Action { index, action } => block.actions[index - 1] = Some(action),
+                }
+            } else {
+                (block.t, s) = (0..s.len())
+                    .filter_map(|mid| Some((s.get(0..mid)?, s.get(mid..)?)))
+                    .find(|(_, rest)| Attribute::parse(rest).is_some())
+                    .unwrap_or((s, ""));
+                break;
+            }
+        }
+        Some((block, s))
+    }
+}
+
+enum Attribute<'s> {
+    Alignment(Alignment),
+    Fg(Color),
+    Bg(Color),
+    Ul(Color),
+    Action { index: usize, action: &'s str },
+}
+
+impl<'s> Attribute<'s> {
+    fn parse(s: &'s str) -> Option<(Self, &'s str)> {
+        if let Some((al, rest)) = Alignment::parse(s) {
+            Some((Self::Alignment(al), rest))
+        } else if let Some((fg, rest)) = parse_color_attr(s, "F") {
+            Some((Self::Fg(fg), rest))
+        } else if let Some((bg, rest)) = parse_color_attr(s, "B") {
+            Some((Self::Bg(bg), rest))
+        } else if let Some((ul, rest)) = parse_color_attr(s, "U") {
+            Some((Self::Ul(ul), rest))
+        } else if let Some((index, action, rest)) = parse_action(s) {
+            Some((Self::Action { index, action }, rest))
+        } else {
+            None
+        }
+    }
+}
+
+struct Parser<'s> {
+    last_alignment: Alignment,
+    s: &'s str,
+    #[cfg(any(test, fuzzing))]
+    elements_yielded: u16,
+}
+
+#[derive(Debug, Default)]
+pub struct ParserError;
+
 impl<'s> Iterator for Parser<'s> {
     type Item = Result<Block<'s>, ParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.s.is_empty() {
-            return None;
-        }
-        let mut block = Block::default();
-        while block.t.is_empty() {
-            let current_len = self.s.len();
-            if let Some((al, rest)) = Alignment::parse(self.s) {
-                self.s = rest;
-                block.alignment = al;
+        (!self.s.is_empty()).then(|| {
+            let (block, s) = Block::parse(self.s).ok_or(ParserError)?;
+            #[cfg(any(test, fuzzing))]
+            {
+                match self.elements_yielded.checked_add(1) {
+                    Some(i) => self.elements_yielded = i,
+                    None => panic!("infinite iterator detected. Input str was {:?}", self.s),
+                }
             }
-            if let Some((fg, rest)) = parse_color_attr(self.s, "F") {
-                self.s = rest;
-                block.fg = Some(fg);
-            }
-            if let Some((bg, rest)) = parse_color_attr(self.s, "B") {
-                self.s = rest;
-                block.bg = Some(bg);
-            }
-            if let Some((ul, rest)) = parse_color_attr(self.s, "U") {
-                self.s = rest;
-                block.ul = Some(ul);
-            }
-            if let Some((idx, action, rest)) = parse_action(self.s) {
-                self.s = rest;
-                block.actions[idx] = Some(action);
-            }
-            if self.s.len() == current_len {
-                let end = self.s.find("%{").unwrap_or(self.s.len());
-                (block.t, self.s) = self.s.split_at(end);
-            }
-        }
-        Some(Ok(block))
+            self.s = s;
+            Ok(block)
+        })
     }
 }
 
@@ -165,6 +225,8 @@ pub fn parse(s: &str) -> impl Iterator<Item = Result<Block<'_>, ParserError>> {
     Parser {
         last_alignment: Default::default(),
         s,
+        #[cfg(any(test, fuzzing))]
+        elements_yielded: 0,
     }
 }
 
@@ -268,5 +330,17 @@ mod test {
                 ..Default::default()
             }
         )
+    }
+
+    #[test]
+    fn fuzzed_input() {
+        parse(r#"k{c%{"#).for_each(|_| {});
+        parse(r#"%{\u{5}"#).for_each(|_| {});
+        parse(r#"%{"#).for_each(|_| {});
+        parse(r#"%{c}"#).for_each(|_| {});
+        parse(r#"%%{l}"#).for_each(|_| {});
+        parse(r#"%`%{F0x}"#).for_each(|_| {});
+        parse(r#"L}{%{U0x"#).for_each(|_| {});
+        parse(r#"%%%{A5:5{A555{5{A%{ll}6""#).for_each(|_| {});
     }
 }
