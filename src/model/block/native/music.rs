@@ -326,12 +326,7 @@ impl Display for Title {
                     c,
                     el1,
                     blue = DisplayColor::new(
-                        g.get_color("blue").copied().unwrap_or(Color {
-                            r: 0x54,
-                            g: 0x98,
-                            b: 0xF8,
-                            a: None,
-                        }),
+                        g.get_color("blue").copied().unwrap_or(Color::BLUE),
                         global_config::get().program,
                     ),
                 )

@@ -74,18 +74,24 @@ where
     B: Bar<W>,
     W: std::fmt::Write,
 {
-    let mut lemonbar = Command::new(B::PROGRAM);
+    let mut lemonbar = if std::env::var("USE_CAT").is_ok() {
+        let mut cat = Command::new("bash");
+        cat.args(["-c", "cat >&2"]);
+        cat
+    } else {
+        let mut lemonbar = Command::new(B::PROGRAM);
+        if log::log_enabled!(log::Level::Debug) {
+            let args = args.into_iter().collect::<Vec<_>>();
+            let args = args.iter().map(|s| s.as_ref()).collect::<Vec<_>>();
+            log::debug!("spawning {} with args {:?}", B::PROGRAM, args);
+            lemonbar.args(args);
+        } else {
+            lemonbar.args(args);
+        }
+        lemonbar
+    };
 
     lemonbar.stdin(Stdio::piped()).stdout(Stdio::piped());
-
-    if log::log_enabled!(log::Level::Debug) {
-        let args = args.into_iter().collect::<Vec<_>>();
-        let args = args.iter().map(|s| s.as_ref()).collect::<Vec<_>>();
-        log::debug!("spawning {} with args {:?}", B::PROGRAM, args);
-        lemonbar.args(args);
-    } else {
-        lemonbar.args(args);
-    }
 
     let mut lemonbar = lemonbar.spawn().expect("Couldn't start lemonbar");
 
