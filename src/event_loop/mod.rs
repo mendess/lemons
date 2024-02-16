@@ -78,6 +78,10 @@ where
         let mut cat = Command::new("bash");
         cat.args(["-c", "cat >&2"]);
         cat
+    } else if let Ok(custom_prog) = std::env::var("USE_CUSTOM") {
+        let mut custom = Command::new("bash");
+        custom.args(["-c", &custom_prog]);
+        custom
     } else {
         let mut lemonbar = Command::new(B::PROGRAM);
         if log::log_enabled!(log::Level::Debug) {

@@ -5,6 +5,9 @@ authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
 
+[workspace]
+members = ["lemonade", "fuzz"]
+
 [dependencies]
 arc-swap = "1.5.1"
 array-init = "2"
