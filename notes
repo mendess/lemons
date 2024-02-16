@@ -1,0 +1,8 @@
+Time from start of fuzzing to bugs fixed:
+- 23:14
+- 00:08
+
+
+Step one, the fuzzer never finishes running one run:
+- fix infinite iterator
+- fix infinite loop
