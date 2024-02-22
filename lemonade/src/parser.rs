@@ -21,7 +21,7 @@ pub struct Color {
 }
 
 impl Color {
-    fn parse(s: &str) -> Option<(Self, &str)> {
+    pub fn parse(s: &str) -> Option<(Self, &str)> {
         fn p(s: &str) -> Option<(u8, u8, u8, Option<u8>, &str)> {
             let (h0, s) = s.split_at_checked(2)?;
             let h0 = u8::from_str_radix(h0, 16).ok()?;

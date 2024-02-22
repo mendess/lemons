@@ -6,3 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap.workspace = true
+epoll.workspace = true
+memfd.workspace = true
+thiserror.workspace = true
+wayland-client.workspace = true
+wayland-cursor.workspace = true
+wayland-protocols-wlr.workspace = true
+wayland-protocols.workspace = true

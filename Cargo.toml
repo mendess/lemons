@@ -8,7 +8,7 @@ default-run = "lemon"
 [workspace]
 members = ["lemonade", "fuzz"]
 
-[dependencies]
+[workspace.dependencies]
 arc-swap = "1.5.1"
 array-init = "2"
 chrono = "0.4"
@@ -16,35 +16,68 @@ clap = { version = "4.4.6", features = ["derive"] }
 derive_builder = "0.10"
 enum-iterator = "0.6"
 env_logger = "0.8"
+epoll = "4.3.3"
 futures = "0.3"
 glob = "0.3"
 itertools = "0.10"
 log = "0.4"
+memfd = "0.6.4"
 once_cell = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+thiserror = "1.0.57"
 tokio-stream = { version = "0.1", features = ["io-util"] }
 unzip-n = "0.1"
+wayland-client = "0.31.2"
+wayland-cursor = "0.31.1"
+wayland-protocols = { version = "0.31.2", features = ["client", "staging", "unstable"] }
+wayland-protocols-wlr = { version = "0.2.0", features = ["client"] }
 whoami = "1.1.5"
 xrandr = "0.2.0"
 
-[dependencies.mlib]
+[workspace.dependencies.mlib]
 git = "https://github.com/mendess/m"
 features = ["player"]
 default-features = false
 rev = "bbef279f2f1c5beea70c5f9003c82961faa22a86"
 
-[dependencies.tokio]
+[workspace.dependencies.tokio]
 version = "1"
 features = [ "sync", "rt", "rt-multi-thread", "net", "signal", "process", "time", "macros", "io-util", "io-std" ]
 
-[dependencies.hyprland]
+[workspace.dependencies.hyprland]
 git = "https://github.com/mendess/hyprland-rs"
 branch = "mendess/workspace-rename-event"
-optional = true
+
+
+[dependencies]
+arc-swap.workspace = true
+array-init.workspace = true
+chrono.workspace = true
+clap.workspace = true
+derive_builder.workspace = true
+enum-iterator.workspace = true
+env_logger.workspace = true
+futures.workspace = true
+glob.workspace = true
+hyprland = { workspace = true, optional = true }
+itertools.workspace = true
+log.workspace = true
+mlib.workspace = true
+once_cell.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+signal-hook-tokio.workspace = true
+signal-hook.workspace = true
+tokio-stream.workspace = true
+tokio.workspace = true
+unzip-n.workspace = true
+whoami.workspace = true
+xrandr.workspace = true
 
 [features]
 default = ["hyprland"]
