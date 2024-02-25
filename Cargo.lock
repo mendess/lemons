@@ -947,7 +947,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hyprland"
 version = "0.3.13"
-source = "git+https://github.com/mendess/hyprland-rs?branch=mendess/workspace-rename-event#9958dd42fbc2057089620475d05e25c7deb043fe"
+source = "git+https://github.com/mendess/hyprland-rs?branch=mendess/remove-panic#ede019bf5ead26734f776e2c5573914045c62802"
 dependencies = [
  "async-trait",
  "derive_more",
@@ -969,7 +969,7 @@ dependencies = [
 [[package]]
 name = "hyprland-macros"
 version = "0.3.13"
-source = "git+https://github.com/mendess/hyprland-rs?branch=mendess/workspace-rename-event#9958dd42fbc2057089620475d05e25c7deb043fe"
+source = "git+https://github.com/mendess/hyprland-rs?branch=mendess/remove-panic#ede019bf5ead26734f776e2c5573914045c62802"
 dependencies = [
  "quote",
  "syn 2.0.39",
@@ -1086,7 +1086,7 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "lemon"
-version = "4.3.2"
+version = "4.3.3"
 dependencies = [
  "arc-swap",
  "array-init",

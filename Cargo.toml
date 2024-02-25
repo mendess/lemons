@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.3.2"
+version = "4.3.3"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
@@ -40,7 +40,7 @@ features = [ "sync", "rt", "rt-multi-thread", "net", "signal", "process", "time"
 
 [dependencies.hyprland]
 git = "https://github.com/mendess/hyprland-rs"
-branch = "mendess/workspace-rename-event"
+branch = "mendess/remove-panic"
 optional = true
 
 [features]

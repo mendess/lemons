@@ -125,7 +125,9 @@ pub struct ZelbarDisplayBlock<'sink, W> {
 
 impl<'sink, W> ZelbarDisplayBlock<'sink, W> {
     fn new(bar: &'sink mut Zelbar<W>) -> Self {
-        Self { sink: &mut bar.sink }
+        Self {
+            sink: &mut bar.sink,
+        }
     }
 
     pub fn new_raw(sink: &'sink mut W) -> Self {
@@ -171,11 +173,7 @@ where
     }
 
     fn add_action(&mut self, action: crate::event_loop::action_task::Action) -> fmt::Result {
-        write!(
-            self.sink,
-            "%{{A{button}:{action}}}",
-            button = action.button,
-        )
+        write!(self.sink, "%{{A{button}:{action}}}", button = action.button,)
     }
 
     fn text(&mut self, body: &str, raw: bool) -> fmt::Result {

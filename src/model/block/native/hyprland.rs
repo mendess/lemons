@@ -37,10 +37,30 @@ impl BlockTask for HyprLand {
         }: TaskData,
     ) {
         for mon in monitors {
-            let updates = updates.clone();
+            let mut updates = updates.clone();
             tokio::spawn(async move {
                 let state = {
-                    let m = Monitor::new(updates, bid, mon).await?;
+                    let m = {
+                        let mut c = 0;
+                        loop {
+                            c += 1;
+                            match Monitor::new(updates, bid, mon).await {
+                                Ok(m) => break m,
+                                Err((_, e)) if c >= 3 => return Err(e),
+                                Err((ch, e)) => {
+                                    updates = ch;
+                                    let error_update =
+                                        (format!("failed to get monitor: {e:?}"), bid, mon);
+                                    updates
+                                        .send(error_update.into())
+                                        .await
+                                        .expect("failed to send block update");
+                                    log::error!("failed getting monitor {e:?}");
+                                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                                }
+                            }
+                        }
+                    };
                     if let Err(e) = m.emit().await {
                         log::error!("failed to emit event: {e:?}");
                     };
@@ -221,12 +241,20 @@ struct Monitor {
 }
 
 impl Monitor {
-    async fn new(sender: UpdateChannel, block_id: BlockId, monitor: u8) -> hyprland::Result<Self> {
-        let (ws, clients, active_monitor) = tokio::try_join!(
+    async fn new(
+        sender: UpdateChannel,
+        block_id: BlockId,
+        monitor: u8,
+    ) -> Result<Self, (UpdateChannel, hyprland::shared::HyprError)> {
+        let data = tokio::try_join!(
             Workspaces::get_async(),
             Clients::get_async(),
             hyprland::data::Monitor::get_active_async()
-        )?;
+        );
+        let (ws, clients, active_monitor) = match data {
+            Ok(x) => x,
+            Err(e) => return Err((sender, e)),
+        };
         let mut ws = ws
             .filter(|w| w.id > 0)
             .filter(|w| w.monitor_id == monitor)
