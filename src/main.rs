@@ -23,6 +23,9 @@ struct Args {
     tray: bool,
     #[arg(short, long, default_value = "lemonbar")]
     program: Program,
+    /// height override
+    #[arg(short, long)]
+    height_override: Option<u32>,
 }
 
 // TODO:
@@ -71,6 +74,7 @@ async fn main() -> io::Result<()> {
         args.outputs,
         args.tray,
         args.program,
+        args.height_override,
         &bc_send,
         &mpsc_send,
     ) {

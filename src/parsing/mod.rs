@@ -47,6 +47,7 @@ pub fn parse(
     outputs: Vec<String>,
     tray: bool,
     program: Program,
+    height_override: Option<u32>,
     broadcast: &broadcast::Sender<Event>,
     responses: &mpsc::Sender<BlockUpdate>,
 ) -> Result<'static, Config<'static>> {
@@ -80,6 +81,7 @@ pub fn parse(
     global_config.n_layers += 1;
     global_config.tray = tray;
     global_config.outputs = outputs;
+    global_config.height = height_override.or(global_config.height);
     crate::global_config::set(global_config);
     Ok(blocks)
 }
