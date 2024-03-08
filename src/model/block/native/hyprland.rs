@@ -10,7 +10,7 @@ use hyprland::{
     },
     shared::{Address, HyprData, HyprDataActive, WorkspaceId, WorkspaceType},
 };
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, oneshot, Mutex};
 
 use crate::{
     display::{zelbar::ZelbarDisplayBlock, DisplayBlock},
@@ -39,8 +39,8 @@ impl BlockTask for HyprLand {
         for mon in monitors {
             let mut updates = updates.clone();
             tokio::spawn(async move {
-                let state = {
-                    let m = {
+                let (state, cancelation) = {
+                    let (mut m, cancelation) = {
                         let mut c = 0;
                         loop {
                             c += 1;
@@ -64,7 +64,7 @@ impl BlockTask for HyprLand {
                     if let Err(e) = m.emit().await {
                         log::error!("failed to emit event: {e:?}");
                     };
-                    Arc::new(Mutex::new(m))
+                    (Arc::new(Mutex::new(m)), cancelation)
                 };
                 let mut listener = AsyncEventListener::new();
                 listener.add_urgent_state_handler(handler(
@@ -202,7 +202,13 @@ impl BlockTask for HyprLand {
                     },
                 ));
 
-                listener.start_listener_async().await
+                tokio::select! {
+                    e = cancelation => {
+                        log::error!("hyprland module shutting down: {e:?}");
+                        Ok(())
+                    }
+                    r = listener.start_listener_async() => r,
+                }
             });
         }
     }
@@ -238,14 +244,22 @@ struct Monitor {
     sender: UpdateChannel,
     block_id: BlockId,
     monitor: u8,
+    /// Starts as true and turns to false as soon as a send error is encountered when emit is
+    /// called.
+    cancelation: Option<oneshot::Sender<CancelationError>>,
 }
+
+type CancelationError = Box<dyn std::error::Error + Send + Sync>;
 
 impl Monitor {
     async fn new(
         sender: UpdateChannel,
         block_id: BlockId,
         monitor: u8,
-    ) -> Result<Self, (UpdateChannel, hyprland::shared::HyprError)> {
+    ) -> Result<
+        (Self, oneshot::Receiver<CancelationError>),
+        (UpdateChannel, hyprland::shared::HyprError),
+    > {
         let data = tokio::try_join!(
             Workspaces::get_async(),
             Clients::get_async(),
@@ -277,14 +291,20 @@ impl Monitor {
 
         ws.sort_by_key(|w| w.id);
 
-        Ok(Self {
-            visible_ws: ws.first().map(|w| w.id),
-            ws,
-            is_focused: active_monitor.id == i128::from(monitor),
-            sender,
-            block_id,
-            monitor,
-        })
+        let (cancelation_tx, cancelation_rx) = oneshot::channel();
+
+        Ok((
+            Self {
+                visible_ws: ws.first().map(|w| w.id),
+                ws,
+                is_focused: active_monitor.id == i128::from(monitor),
+                sender,
+                block_id,
+                monitor,
+                cancelation: Some(cancelation_tx),
+            },
+            cancelation_rx,
+        ))
     }
 
     fn find_window(&mut self, addr: &Address) -> Option<&mut Window> {
@@ -326,7 +346,7 @@ impl Monitor {
             .for_each(|w| w.windows.retain(|w| w.addr != *addr));
     }
 
-    async fn emit(&self) -> fmt::Result {
+    async fn emit(&mut self) -> fmt::Result {
         let global_conf = global_config::get();
         let mut text = String::new();
         for w in &self.ws {
@@ -370,7 +390,8 @@ impl Monitor {
                 self.visible_ws
             );
         }
-        self.sender
+        if let Err(e) = self
+            .sender
             .send(crate::model::block::BlockUpdate {
                 text,
                 alignment: self.block_id.0,
@@ -378,7 +399,11 @@ impl Monitor {
                 monitor: self.monitor,
             })
             .await
-            .unwrap();
+        {
+            if let Some(c) = self.cancelation.take() {
+                let _ = c.send(Box::new(e));
+            }
+        }
         Ok(())
     }
 }
