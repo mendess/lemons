@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt};
 
 use crate::model::Color;
 
-use super::{implementations::DisplayColor, CmdlineArgBuilder};
+use super::{implementations::DisplayColor, CmdlineArgBuilder, DisplayBlock};
 
 pub struct Lemonbar<W> {
     sink: W,
@@ -112,15 +112,15 @@ impl<W: fmt::Write> super::Bar<W> for Lemonbar<W> {
         write!(self.sink, "{alignment}")
     }
 
-    fn start_block(&mut self) -> Result<Self::BarBlockBuilder<'_>, fmt::Error> {
+    fn start_block(&mut self, delimit: bool) -> Result<Self::BarBlockBuilder<'_>, fmt::Error> {
         if self.already_wrote_first_block_of_aligment {
-            if let Some(sep) = self.separator {
+            if let Some(sep) = self.separator.filter(|_| delimit) {
                 self.sink.write_str(sep)?;
             }
         } else {
             self.already_wrote_first_block_of_aligment = true;
         }
-        Ok(LemonDisplayBlock::new(self))
+        Ok(LemonDisplayBlock::new(&mut self.sink))
     }
 
     fn into_inner(self) -> W {
@@ -129,7 +129,7 @@ impl<W: fmt::Write> super::Bar<W> for Lemonbar<W> {
 }
 
 pub struct LemonDisplayBlock<'bar, W> {
-    bar: &'bar mut Lemonbar<W>,
+    sink: &'bar mut W,
     offset: bool,
     bg: bool,
     fg: bool,
@@ -139,9 +139,9 @@ pub struct LemonDisplayBlock<'bar, W> {
 }
 
 impl<'bar, W> LemonDisplayBlock<'bar, W> {
-    fn new(bar: &'bar mut Lemonbar<W>) -> Self {
+    fn new(sink: &'bar mut W) -> Self {
         Self {
-            bar,
+            sink,
             offset: false,
             bg: false,
             fg: false,
@@ -161,11 +161,11 @@ where
         P: fmt::Display,
         S: fmt::Display,
     {
-        write!(self.bar.sink, "%{{{}{}}}", prefix, s)
+        write!(self.sink, "%{{{}{}}}", prefix, s)
     }
 }
 
-impl<'bar, W> super::DisplayBlock for LemonDisplayBlock<'bar, W>
+impl<'bar, W> DisplayBlock for LemonDisplayBlock<'bar, W>
 where
     W: fmt::Write,
 {
@@ -187,7 +187,7 @@ where
     fn underline(&mut self, color: &Color) -> fmt::Result {
         self.underline = true;
         self.write('U', show_c(color))?;
-        self.bar.sink.write_str("%{+u}")
+        self.sink.write_str("%{+u}")
     }
 
     fn font(&mut self, font: &crate::model::block::Font<'_>) -> fmt::Result {
@@ -198,7 +198,7 @@ where
     fn add_action(&mut self, action: crate::event_loop::action_task::Action) -> fmt::Result {
         self.actions += 1;
         write!(
-            self.bar.sink,
+            self.sink,
             "%{{A{button}:{action}:}}",
             button = action.button,
         )
@@ -216,19 +216,19 @@ where
         } else {
             Cow::Borrowed(body)
         };
-        self.bar.sink.write_str(&body)
+        self.sink.write_str(&body)
     }
 
     fn finish(mut self) -> fmt::Result {
         for _ in 0..self.actions {
-            self.bar.sink.write_str("%{A}")?;
+            self.sink.write_str("%{A}")?;
         }
         if self.font {
             self.write('T', '-')?;
         }
         if self.underline {
             self.write('U', "-")?;
-            self.bar.sink.write_str("%{-u}")?;
+            self.sink.write_str("%{-u}")?;
         }
         if self.fg {
             self.write('F', '-')?;

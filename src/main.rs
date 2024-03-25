@@ -24,7 +24,7 @@ struct Args {
     #[arg(short, long, default_value = "lemonbar")]
     program: Program,
     /// height override
-    #[arg(short, long)]
+    #[arg(long)]
     height_override: Option<u32>,
 }
 

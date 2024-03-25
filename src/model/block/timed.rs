@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     event_loop::{current_layer, update_channel::UpdateChannel},
-    util::{cmd::run_cmd, result_ext::ResultExt, signal::sig_rt_min},
+    util::{cmd::run_cmd, result_ext::ResultExt, signal::sig_rt_min, trim_new_lines},
 };
 use std::time::Duration;
 use tokio::{
@@ -103,10 +103,11 @@ async fn update_blocks(
     let layer = current_layer();
     if activation_layer == layer {
         for m in monitors.iter() {
-            let output = run_cmd(cmd, m, layer)
+            let mut output = run_cmd(cmd, m, layer)
                 .await
                 .map_err(|e| e.to_string())
                 .merge();
+            trim_new_lines(&mut output);
             updates
                 .send((output, bid, m).into())
                 .await

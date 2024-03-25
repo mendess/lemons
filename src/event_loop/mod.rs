@@ -6,13 +6,15 @@ use crate::{
     display::{display_block, Bar},
     global_config,
     model::{
-        block::{BlockId, BlockUpdate},
+        block::{self, Block, BlockId, BlockText, BlockUpdate},
         Alignment, Config,
     },
+    util::one_or_more::OneOrMore,
 };
 use enum_iterator::IntoEnumIterator;
 use std::{
     ffi::OsStr,
+    ops::{Index, IndexMut},
     process::Stdio,
     sync::{
         atomic::{AtomicU16, Ordering},
@@ -108,8 +110,59 @@ pub fn current_layer() -> u16 {
     CURRENT_LAYER.load(Ordering::Acquire)
 }
 
+struct RunningBlock {
+    block: Block<'static>,
+    last_run: OneOrMore<Vec<BlockText>>,
+}
+
+struct RunningConfig([Vec<RunningBlock>; 3]);
+
+impl From<Config<'static>> for RunningConfig {
+    fn from(value: Config<'static>) -> Self {
+        Self(value.0.map(|monitor_blocks| {
+            monitor_blocks
+                .into_iter()
+                .map(|block| {
+                    let mut last_run = OneOrMore::default();
+                    block.active_in.resize_one_or_more(&mut last_run);
+                    RunningBlock { block, last_run }
+                })
+                .collect()
+        }))
+    }
+}
+
+impl Index<Alignment> for RunningConfig {
+    type Output = Vec<RunningBlock>;
+
+    fn index(&self, a: Alignment) -> &Self::Output {
+        &self.0[a as usize]
+    }
+}
+
+impl IndexMut<Alignment> for RunningConfig {
+    fn index_mut(&mut self, a: Alignment) -> &mut Self::Output {
+        &mut self.0[a as usize]
+    }
+}
+
+impl RunningConfig {
+    pub fn update(&mut self, update: block::BlockUpdate) -> bool {
+        let (alignment, index, monitor) = update.id();
+        let block = &mut self[alignment][index].last_run[monitor];
+        let new_block = update.into_inner_text();
+        if *block != new_block {
+            log::debug!("bar update '{new_block:?}' from {:?}", (alignment, index));
+            block.clone_from(&new_block);
+            true
+        } else {
+            false
+        }
+    }
+}
+
 pub async fn start_event_loop<B>(
-    mut config: Config<'static>,
+    config: Config<'static>,
     events: broadcast::Sender<Event>,
     mut updates: mpsc::Receiver<BlockUpdate>,
 ) where
@@ -134,13 +187,13 @@ pub async fn start_event_loop<B>(
     signal_task::refresh(events.clone());
     signal_task::layer(events.clone());
 
+    let mut config = RunningConfig::from(config);
     let mut line = String::new();
     while let Some(update) = updates.recv().await {
-        let (al, index, monitor) = update.id();
-        if !config.update(&update) {
+        let (_, _, monitor) = update.id();
+        if !config.update(update) {
             continue;
         }
-        log::debug!("bar update '{}' from {:?}", update.as_str(), (al, index));
         match lemon_inputs.get_mut(monitor as usize) {
             Some(input) => {
                 line = build_line::<B>(&config, monitor, line);
@@ -165,7 +218,7 @@ pub async fn start_event_loop<B>(
     }
 }
 
-fn build_line<B>(config: &Config, monitor: u8, mut line: String) -> String
+fn build_line<B>(config: &RunningConfig, monitor: u8, mut line: String) -> String
 where
     B: Bar<String>,
 {
@@ -182,10 +235,10 @@ where
                 .iter()
                 .enumerate()
                 .filter(|(_, b)| !b.last_run[monitor].is_empty())
-                .filter(|(_, b)| b.layer == current_layer)
+                .filter(|(_, b)| b.block.layer == current_layer)
                 .for_each(|(index, b)| {
                     set_alignment.call_once(|| bar.set_alignment(al).unwrap());
-                    display_block(&mut bar, b, index, monitor).unwrap()
+                    display_block(&mut bar, &b.block, &b.last_run[monitor], index, monitor).unwrap()
                 });
         });
     // TODO: line.lemon('O', tray_offset).unwrap();

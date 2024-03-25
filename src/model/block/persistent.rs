@@ -1,5 +1,5 @@
 use super::{Event, TaskData};
-use crate::{event_loop::current_layer, global_config, util::cmd};
+use crate::{event_loop::current_layer, global_config, util::{cmd, trim_new_lines}};
 use futures::stream::{Stream, StreamExt};
 use std::process::Stdio;
 use tokio::{
@@ -40,7 +40,8 @@ impl super::BlockTask for Persistent {
                     loop {
                         tokio::select! {
                             Some(l) = output.next() => {
-                                if let Ok(l) = l {
+                                if let Ok(mut l) = l {
+                                    trim_new_lines(&mut l);
                                     if updates.send((l, bid, mon).into()).await.is_err() {
                                         break
                                     }

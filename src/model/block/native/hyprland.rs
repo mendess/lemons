@@ -13,11 +13,10 @@ use hyprland::{
 use tokio::sync::{broadcast, oneshot, Mutex};
 
 use crate::{
-    display::{zelbar::ZelbarDisplayBlock, DisplayBlock},
     event_loop::{update_channel::UpdateChannel, Event},
     global_config,
     model::{
-        block::{BlockId, BlockTask, TaskData},
+        block::{BlockId, BlockTask, TaskData, TextDecorations},
         Color,
     },
 };
@@ -348,41 +347,52 @@ impl Monitor {
 
     async fn emit(&mut self) -> fmt::Result {
         let global_conf = global_config::get();
-        let mut text = String::new();
-        for w in &self.ws {
-            let mut block = ZelbarDisplayBlock::new_raw(&mut text);
-            if w.windows.iter().any(|w| w.urgent) {
-                block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                block.bg(global_conf.get_color("red").unwrap_or(&Color::RED))?;
-            } else {
-                match (self.visible_ws, self.is_focused) {
-                    // visible and on focused monitor
-                    (Some(wid), true) if wid == w.id => {
-                        block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                        block.bg(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
-                    }
-                    // visible but not on focused monitor
-                    (Some(wid), false) if wid == w.id => {
-                        block.fg(global_conf.get_color("black").unwrap_or(&Color::BLACK))?;
-                        block.bg(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
-                    }
-                    // not visible on focused monitor
-                    (_, true) => {
-                        block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
-                        block.underline(global_conf.get_color("blue").unwrap_or(&Color::BLUE))?;
-                    }
-                    // not visible and not on focused monitor
-                    (_, false) => {
-                        block.fg(global_conf.get_color("white").unwrap_or(&Color::WHITE))?;
-                        block.underline(global_conf.get_color("green").unwrap_or(&Color::GREEN))?;
+        let text = self
+            .ws
+            .iter()
+            .map(|w| {
+                let mut decorations = TextDecorations::default();
+                if w.windows.iter().any(|w| w.urgent) {
+                    decorations.fg = Some(*global_conf.get_color("black").unwrap_or(&Color::BLACK));
+                    decorations.bg = Some(*global_conf.get_color("red").unwrap_or(&Color::RED));
+                } else {
+                    match (self.visible_ws, self.is_focused) {
+                        // visible and on focused monitor
+                        (Some(wid), true) if wid == w.id => {
+                            decorations.fg =
+                                Some(*global_conf.get_color("black").unwrap_or(&Color::BLACK));
+                            decorations.bg =
+                                Some(*global_conf.get_color("blue").unwrap_or(&Color::BLUE));
+                        }
+                        // visible but not on focused monitor
+                        (Some(wid), false) if wid == w.id => {
+                            decorations.fg =
+                                Some(*global_conf.get_color("black").unwrap_or(&Color::BLACK));
+                            decorations.bg =
+                                Some(*global_conf.get_color("green").unwrap_or(&Color::GREEN));
+                        }
+                        // not visible on focused monitor
+                        (_, true) => {
+                            decorations.fg =
+                                Some(*global_conf.get_color("white").unwrap_or(&Color::WHITE));
+                            decorations.underline =
+                                Some(*global_conf.get_color("blue").unwrap_or(&Color::BLUE));
+                        }
+                        // not visible and not on focused monitor
+                        (_, false) => {
+                            decorations.fg =
+                                Some(*global_conf.get_color("white").unwrap_or(&Color::WHITE));
+                            decorations.underline =
+                                Some(*global_conf.get_color("green").unwrap_or(&Color::GREEN));
+                        }
                     }
                 }
-            }
-            block.text(" ", false)?;
-            block.text(&w.name, false)?;
-            block.text(" ", false)?;
-            block.finish()?;
-        }
+                crate::model::block::BlockText {
+                    decorations,
+                    text: format!(" {} ", &w.name),
+                }
+            })
+            .collect();
         if log::max_level() >= log::Level::Info {
             log::info!(
                 "{:?} => {:?}",

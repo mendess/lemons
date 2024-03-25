@@ -5,10 +5,7 @@ pub mod signal_task;
 pub mod timed;
 
 use super::{ActiveMonitors, Alignment, Color, Layer};
-use crate::{
-    event_loop::{update_channel::UpdateChannel, Event, MouseButton},
-    util::one_or_more::OneOrMore,
-};
+use crate::event_loop::{update_channel::UpdateChannel, Event, MouseButton};
 use derive_builder::Builder;
 use std::{
     convert::TryFrom,
@@ -17,9 +14,30 @@ use std::{
 };
 use tokio::sync::broadcast;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct BlockText {
+    pub decorations: TextDecorations,
+    pub text: String,
+}
+
+impl From<String> for BlockText {
+    fn from(text: String) -> Self {
+        Self {
+            decorations: Default::default(),
+            text,
+        }
+    }
+}
+
+impl BlockText {
+    pub fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+}
+
 #[derive(Debug)]
 pub struct BlockUpdate {
-    text: String,
+    text: Vec<BlockText>,
     alignment: Alignment,
     index: usize,
     monitor: u8,
@@ -30,6 +48,20 @@ pub type BlockId = (Alignment, usize);
 impl From<(String, BlockId, u8)> for BlockUpdate {
     fn from((text, (alignment, index), monitor): (String, BlockId, u8)) -> Self {
         Self {
+            text: vec![BlockText {
+                decorations: Default::default(),
+                text,
+            }],
+            alignment,
+            index,
+            monitor,
+        }
+    }
+}
+
+impl From<(Vec<BlockText>, BlockId, u8)> for BlockUpdate {
+    fn from((text, (alignment, index), monitor): (Vec<BlockText>, BlockId, u8)) -> Self {
+        Self {
             text,
             alignment,
             index,
@@ -39,24 +71,14 @@ impl From<(String, BlockId, u8)> for BlockUpdate {
 }
 
 impl BlockUpdate {
-    pub fn id(&self) -> (Alignment, usize, u8) {
-        (self.alignment, self.index, self.monitor)
-    }
-
-    pub fn text_mut(&mut self) -> &mut String {
-        &mut self.text
-    }
-
-    pub fn text(&self) -> &String {
-        &self.text
-    }
-
-    pub fn into_text(self) -> String {
+    pub fn into_inner_text(self) -> Vec<BlockText> {
         self.text
     }
+}
 
-    pub fn as_str(&self) -> &str {
-        &self.text
+impl BlockUpdate {
+    pub fn id(&self) -> (Alignment, usize, u8) {
+        (self.alignment, self.index, self.monitor)
     }
 }
 
@@ -130,15 +152,24 @@ impl<'a> TryFrom<&'a str> for Offset<'a> {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+pub struct TextDecorations {
+    pub bg: Option<Color>,
+    pub fg: Option<Color>,
+    pub underline: Option<Color>,
+}
+
+impl TextDecorations {
+    pub fn is_default(&self) -> bool {
+        self.bg.is_none() && self.fg.is_none() && self.bg.is_none()
+    }
+}
+
 #[derive(Builder, Debug)]
 #[builder(setter(strip_option))]
 pub struct Block<'a> {
     #[builder(default)]
-    pub bg: Option<Color>,
-    #[builder(default)]
-    pub fg: Option<Color>,
-    #[builder(default)]
-    pub un: Option<Color>,
+    pub decorations: TextDecorations,
     #[builder(default)]
     pub font: Option<Font<'a>>, // 1-infinity index or '-'
     #[builder(default)]
@@ -150,9 +181,10 @@ pub struct Block<'a> {
 
     pub alignment: Alignment,
 
-    #[builder(setter(skip))]
-    pub last_run: OneOrMore<String>,
-
+    #[builder(default)]
+    pub active_in: ActiveMonitors,
+    // #[builder(setter(skip))]
+    // pub last_run: OneOrMore<String>,
     #[builder(setter(skip), default)]
     pub available_actions: AvailableActions,
 }

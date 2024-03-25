@@ -61,8 +61,8 @@ impl Block<'static> {
         broadcast: &broadcast::Sender<Event>,
         responses: &mpsc::Sender<BlockUpdate>,
     ) -> Result<'static, Self> {
+        let mut decorations_b = TextDecorations::default();
         let mut block_b = BlockBuilder::default();
-        let mut multi_monitor = false;
         let mut actions: Actions<'static> = Default::default();
         let mut signal = Signal::None;
         // mandatory parameters
@@ -81,13 +81,13 @@ impl Block<'static> {
             };
             match key {
                 "background" | "bg" => {
-                    block_b.bg(color()?);
+                    decorations_b.bg = Some(color()?);
                 }
                 "foreground" | "fg" => {
-                    block_b.fg(color()?);
+                    decorations_b.fg = Some(color()?);
                 }
                 "underline" | "un" => {
-                    block_b.un(color()?);
+                    decorations_b.underline = Some(color()?);
                 }
                 "font" => {
                     block_b.font(
@@ -166,9 +166,16 @@ impl Block<'static> {
                     );
                 }
                 "multi_monitor" => {
-                    multi_monitor = value
-                        .parse()
-                        .map_err(|_| ParseError::InvalidBoolean(value))?;
+                    block_b.active_in(
+                        if value
+                            .parse()
+                            .map_err(|_| ParseError::InvalidBoolean(value))?
+                        {
+                            ActiveMonitors::MonitorCount(n_monitors)
+                        } else {
+                            ActiveMonitors::All
+                        },
+                    );
                 }
                 "layer" => {
                     block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?);
@@ -179,15 +186,11 @@ impl Block<'static> {
             };
         }
         if let Some((value, kind)) = cmd {
-            let monitors = if multi_monitor {
-                ActiveMonitors::MonitorCount(n_monitors)
-            } else {
-                ActiveMonitors::All
-            };
+            block_b.decorations(decorations_b);
             let mut block = block_b
                 .build()
                 .map_err(|e| ParseError::MalformedBlock(e.to_string()))?;
-            monitors.resize_one_or_more(&mut block.last_run);
+            // monitors.resize_one_or_more(&mut block.last_run);
             block
                 .available_actions
                 .set_all(actions.iter().map(Option::is_some));
@@ -221,7 +224,7 @@ impl Block<'static> {
                     actions,
                     bid,
                     activation_layer: block.layer,
-                    monitors,
+                    monitors: block.active_in,
                     signal,
                 },
             );

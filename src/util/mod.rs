@@ -28,3 +28,8 @@ static NUMBERS: [&str; u8::MAX as usize + 1] = [
 pub fn number_as_str(n: u8) -> &'static str {
     NUMBERS[n as usize]
 }
+
+pub fn trim_new_lines(s: &mut String) {
+    let new_len = s.trim_end_matches('\n').len();
+    s.truncate(new_len);
+}

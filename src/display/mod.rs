@@ -1,5 +1,5 @@
 pub mod implementations;
-mod lemonbar;
+pub mod lemonbar;
 pub mod zelbar;
 
 use std::{fmt, str::FromStr};
@@ -7,7 +7,7 @@ use std::{fmt, str::FromStr};
 use crate::{
     event_loop::action_task::Action,
     model::{
-        block::{Block, Font, Offset},
+        block::{Block, BlockText, Font, Offset},
         Alignment, Color,
     },
 };
@@ -56,7 +56,7 @@ pub trait Bar<W: fmt::Write> {
 
     fn set_alignment(&mut self, alignment: Alignment) -> fmt::Result;
 
-    fn start_block(&mut self) -> Result<Self::BarBlockBuilder<'_>, fmt::Error>;
+    fn start_block(&mut self, delimit: bool) -> Result<Self::BarBlockBuilder<'_>, fmt::Error>;
 
     fn into_inner(self) -> W;
 }
@@ -95,29 +95,32 @@ pub trait DisplayBlock {
 pub fn display_block<W: fmt::Write, B: Bar<W>>(
     bar: &mut B,
     block: &Block<'_>,
+    text: &[BlockText],
     index: usize,
     monitor: u8,
 ) -> fmt::Result {
-    let mut builder = bar.start_block()?;
-    if let Some(x) = &block.offset {
-        builder.offset(x)?;
+    for (i, text) in text.iter().filter(|b| !b.is_empty()).enumerate() {
+        let mut builder = bar.start_block(i == 0)?;
+        if let Some(x) = &block.offset {
+            builder.offset(x)?;
+        }
+        if let Some(x) = text.decorations.bg.or(block.decorations.bg) {
+            builder.bg(&x)?;
+        }
+        if let Some(x) = text.decorations.fg.or(block.decorations.fg) {
+            builder.fg(&x)?;
+        }
+        if let Some(x) = text.decorations.underline.or(block.decorations.underline) {
+            builder.underline(&x)?;
+        }
+        if let Some(x) = &block.font {
+            builder.font(x)?;
+        }
+        for button in block.available_actions.iter() {
+            builder.add_action(Action::new(block.alignment, index, monitor, button))?;
+        }
+        builder.text(&text.text, block.raw)?;
+        builder.finish()?;
     }
-    if let Some(x) = &block.bg {
-        builder.bg(x)?;
-    }
-    if let Some(x) = &block.fg {
-        builder.fg(x)?;
-    }
-    if let Some(x) = &block.un {
-        builder.underline(x)?;
-    }
-    if let Some(x) = &block.font {
-        builder.font(x)?;
-    }
-    for button in block.available_actions.iter() {
-        builder.add_action(Action::new(block.alignment, index, monitor, button))?;
-    }
-    let body = block.last_run[monitor].trim_end_matches('\n');
-    builder.text(body, block.raw)?;
-    builder.finish()
+    Ok(())
 }

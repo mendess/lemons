@@ -9,7 +9,7 @@ use regex::{Captures, Regex};
 
 use crate::model::{Alignment, Color};
 
-use super::{implementations::DisplayColor, CmdlineArgBuilder};
+use super::{implementations::DisplayColor, CmdlineArgBuilder, DisplayBlock};
 
 pub struct Zelbar<W> {
     sink: W,
@@ -101,9 +101,9 @@ impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
         Ok(())
     }
 
-    fn start_block(&mut self) -> Result<Self::BarBlockBuilder<'_>, fmt::Error> {
+    fn start_block(&mut self, delimit: bool) -> Result<Self::BarBlockBuilder<'_>, fmt::Error> {
         if self.already_wrote_first_block_of_aligment {
-            if let Some(sep) = self.separator {
+            if let Some(sep) = self.separator.filter(|_| delimit) {
                 write!(self.sink, "{}", self.alignment)?;
                 self.sink.write_str(sep)?;
             }
@@ -111,7 +111,7 @@ impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
             self.already_wrote_first_block_of_aligment = true;
         }
         write!(self.sink, "{}", self.alignment)?;
-        Ok(ZelbarDisplayBlock::new(self))
+        Ok(ZelbarDisplayBlock::new(&mut self.sink))
     }
 
     fn into_inner(self) -> W {
@@ -123,14 +123,8 @@ pub struct ZelbarDisplayBlock<'sink, W> {
     sink: &'sink mut W,
 }
 
-impl<'sink, W> ZelbarDisplayBlock<'sink, W> {
-    fn new(bar: &'sink mut Zelbar<W>) -> Self {
-        Self {
-            sink: &mut bar.sink,
-        }
-    }
-
-    pub fn new_raw(sink: &'sink mut W) -> Self {
+impl<'bar, W> ZelbarDisplayBlock<'bar, W> {
+    fn new(sink: &'bar mut W) -> Self {
         Self { sink }
     }
 }
@@ -148,7 +142,7 @@ where
     }
 }
 
-impl<'bar, W> super::DisplayBlock for ZelbarDisplayBlock<'bar, W>
+impl<'bar, W> DisplayBlock for ZelbarDisplayBlock<'bar, W>
 where
     W: fmt::Write,
 {

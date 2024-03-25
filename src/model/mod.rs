@@ -13,7 +13,7 @@ pub use monitor::ActiveMonitors;
 use std::ops::{Index, IndexMut};
 
 #[derive(Default)]
-pub struct Config<'a>([Vec<Block<'a>>; 3]);
+pub struct Config<'a>(pub [Vec<Block<'a>>; 3]);
 
 impl<'a> Index<Alignment> for Config<'a> {
     type Output = Vec<Block<'a>>;
@@ -26,20 +26,6 @@ impl<'a> Index<Alignment> for Config<'a> {
 impl<'a> IndexMut<Alignment> for Config<'a> {
     fn index_mut(&mut self, a: Alignment) -> &mut Self::Output {
         &mut self.0[a as usize]
-    }
-}
-
-impl<'a> Config<'a> {
-    pub fn update(&mut self, update: &block::BlockUpdate) -> bool {
-        let (alignment, index, monitor) = update.id();
-        let block = &mut self[alignment][index].last_run[monitor];
-        let new_block = update.text();
-        if block != new_block {
-            block.clone_from(new_block);
-            true
-        } else {
-            false
-        }
     }
 }
 

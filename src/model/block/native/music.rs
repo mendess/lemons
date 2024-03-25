@@ -1,19 +1,17 @@
 use super::super::{BlockId, BlockTask, TaskData};
 use crate::{
-    display::implementations::DisplayColor,
     event_loop::{current_layer, Event, MouseButton},
-    global_config,
-    model::Color,
+    model::{
+        block::{BlockText, TextDecorations},
+        Color,
+    },
 };
 use futures::stream::StreamExt;
 use mlib::players::{
     self,
     event::{OwnedLibMpvEvent, PlayerEvent},
 };
-use std::{
-    fmt::{self, Display},
-    sync::Arc,
-};
+use std::sync::Arc;
 use tokio::sync::{broadcast, watch};
 
 #[derive(Debug)]
@@ -34,7 +32,7 @@ impl BlockTask for Music {
                 let data = receiver
                     .borrow_and_update()
                     .as_ref()
-                    .map(ToString::to_string)
+                    .map(BarData::to_decorated_text)
                     .unwrap_or_default();
                 if updates.send((data, bid, u8::MAX).into()).await.is_err() {
                     log::warn!("native music block shutting down");
@@ -291,10 +289,8 @@ impl Title {
             chapter: Some(chapter),
         }
     }
-}
 
-impl Display for Title {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn to_decorated_text(&self, blocks: &mut Vec<BlockText>) {
         const TRUNC_LEN: usize = 22;
         fn trunc(s: &str) -> (&str, &'static str) {
             let layer = current_layer();
@@ -311,29 +307,39 @@ impl Display for Title {
             }
         }
         let Some(media_title) = &self.media_title else {
-            return Ok(());
+            return;
         };
         match &self.chapter {
             Some(chapter) => {
                 let g = crate::global_config::get();
                 let (v, el) = trunc(media_title);
                 let (c, el1) = trunc(chapter);
-                write!(
-                    f,
-                    "%{{F{blue}}}Video:%{{F-}} {}{} %{{F{blue}}}Song:%{{F-}} {}{}",
-                    v,
-                    el,
-                    c,
-                    el1,
-                    blue = DisplayColor::new(
-                        g.get_color("blue").copied().unwrap_or(Color::BLUE),
-                        global_config::get().program,
-                    ),
-                )
+                let blue = TextDecorations {
+                    fg: Some(*g.get_color("blue").unwrap_or(&Color::BLUE)),
+                    ..Default::default()
+                };
+                blocks.extend([
+                    BlockText {
+                        decorations: blue,
+                        text: "Video:".into(),
+                    },
+                    BlockText {
+                        decorations: Default::default(),
+                        text: format!(" {v}{el} "),
+                    },
+                    BlockText {
+                        decorations: blue,
+                        text: "Song:".into(),
+                    },
+                    BlockText {
+                        decorations: Default::default(),
+                        text: format!(" {c}{el1} "),
+                    },
+                ]);
             }
             None => {
                 let (title, elipsis) = trunc(media_title);
-                write!(f, "{}{}", title, elipsis)
+                blocks.push(BlockText::from(format!("{title}{elipsis}")));
             }
         }
     }
@@ -373,18 +379,26 @@ impl BarData {
             volume: p!(players::volume().await),
         }))
     }
-}
 
-impl Display for BarData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}] ", self.player_index)?;
-        write!(f, "{} ", self.title)?;
+    fn to_decorated_text(&self) -> Vec<BlockText> {
+        let mut blocks = Vec::new();
+        blocks.push(BlockText {
+            decorations: Default::default(),
+            text: format!("[{}] ", self.player_index),
+        });
+        self.title.to_decorated_text(&mut blocks);
         if let Some(paused) = self.paused {
-            write!(f, "{} ", if paused { "||" } else { ">" })?;
+            blocks.push(BlockText {
+                decorations: Default::default(),
+                text: if paused { " || " } else { " > " }.into()
+            })
         }
         if let Some(volume) = self.volume {
-            write!(f, "{volume}%")?;
+            blocks.push(BlockText {
+                decorations: Default::default(),
+                text: format!("{volume}%")
+            })
         }
-        Ok(())
+        blocks
     }
 }
