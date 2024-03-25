@@ -115,13 +115,13 @@ impl<'s> Index<MouseButton> for Actions<'s> {
     type Output = Option<&'s str>;
 
     fn index(&self, index: MouseButton) -> &Self::Output {
-        &self[index as usize]
+        &self[index as usize - 1]
     }
 }
 
 impl<'s> IndexMut<MouseButton> for Actions<'s> {
     fn index_mut(&mut self, index: MouseButton) -> &mut Self::Output {
-        &mut self[index as usize]
+        &mut self[index as usize - 1]
     }
 }
 
