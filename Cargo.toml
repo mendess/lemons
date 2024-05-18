@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.3.7"
+version = "4.3.8"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
@@ -32,7 +32,7 @@ xrandr = "0.2.0"
 git = "https://github.com/mendess/m"
 features = ["player"]
 default-features = false
-rev = "bbef279f2f1c5beea70c5f9003c82961faa22a86"
+rev = "d9f9e2f3b4dde825c8f5a585959e739f5a45dbc6"
 
 [dependencies.tokio]
 version = "1"

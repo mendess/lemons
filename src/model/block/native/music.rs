@@ -25,9 +25,15 @@ impl BlockTask for Music {
             let (bar_data, _) = watch::channel(BarData::fetch().await.unwrap());
             let mut receiver = bar_data.subscribe();
             bar_data.send_modify(|_| {});
-            let bar_data = Arc::new(bar_data);
+            let mut bar_data = Arc::new(bar_data);
             tokio::spawn(user_event_loop(events, bid, bar_data.clone()));
-            tokio::spawn(player_event_loop(bar_data));
+            tokio::spawn(async move {
+                loop {
+                    bar_data = player_event_loop(bar_data).await;
+                    bar_data.send_if_modified(|data| data.take().is_some());
+                    players::wait_for_music_daemon_to_start().await;
+                }
+            });
             while receiver.changed().await.is_ok() {
                 let data = receiver
                     .borrow_and_update()
@@ -80,7 +86,7 @@ async fn reset_data(bar_data: &BarDataWatcher) {
     };
 }
 
-async fn player_event_loop(bar_data: BarDataWatcher) {
+async fn player_event_loop(bar_data: BarDataWatcher) -> BarDataWatcher {
     let event_stream = players::subscribe().await.unwrap();
     reset_data(&bar_data).await;
     tokio::pin!(event_stream);
@@ -180,6 +186,8 @@ async fn player_event_loop(bar_data: BarDataWatcher) {
             }
         }
     }
+    log::error!("player event loop exiting");
+    bar_data
 }
 
 fn update_title(data: &mut Option<BarData>, title: String, player_index: usize) -> bool {
@@ -390,13 +398,13 @@ impl BarData {
         if let Some(paused) = self.paused {
             blocks.push(BlockText {
                 decorations: Default::default(),
-                text: if paused { " || " } else { " > " }.into()
+                text: if paused { " || " } else { " > " }.into(),
             })
         }
         if let Some(volume) = self.volume {
             blocks.push(BlockText {
                 decorations: Default::default(),
-                text: format!("{volume}%")
+                text: format!("{volume}%"),
             })
         }
         blocks
