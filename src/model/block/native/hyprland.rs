@@ -49,7 +49,7 @@ impl BlockTask for HyprLand {
                                 Err((ch, e)) => {
                                     updates = ch;
                                     let error_update =
-                                        (format!("failed to get monitor: {e:?}"), bid, mon);
+                                        (format!("failed to get monitor: {e}"), bid, mon);
                                     updates
                                         .send(error_update.into())
                                         .await
