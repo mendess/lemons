@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.3.9"
+version = "4.3.10"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
@@ -39,8 +39,8 @@ version = "1"
 features = [ "sync", "rt", "rt-multi-thread", "net", "signal", "process", "time", "macros", "io-util", "io-std" ]
 
 [dependencies.hyprland]
-git = "https://github.com/mendess/hyprland-rs"
-branch = "mendess/remove-panic"
+git = "https://github.com/hyprland-community/hyprland-rs"
+rev = "96f8f768aa7e203e0c3239f01943a7ce9ee35247"
 optional = true
 
 [features]

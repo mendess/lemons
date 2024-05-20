@@ -1,12 +1,12 @@
 use core::fmt;
 use std::sync::Arc;
 
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, TryFutureExt};
 use hyprland::{
     data::{Clients, Workspaces},
     event_listener::{
         AsyncEventListener, MonitorEventData, WindowEventData, WindowMoveEvent, WindowOpenEvent,
-        WorkspaceRenameEventData,
+        WorkspaceDestroyedEventData, WorkspaceRenameEventData,
     },
     shared::{Address, HyprData, HyprDataActive, WorkspaceId, WorkspaceType},
 };
@@ -20,6 +20,8 @@ use crate::{
         Color,
     },
 };
+
+pub(crate) type VoidFuture = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
 
 #[derive(Debug)]
 pub struct HyprLand;
@@ -43,7 +45,7 @@ impl BlockTask for HyprLand {
                         let mut c = 0;
                         loop {
                             c += 1;
-                            match Monitor::new(updates, bid, mon).await {
+                            match Monitor::new(updates, bid, mon.into()).await {
                                 Ok(m) => break m,
                                 Err((_, e)) if c >= 3 => return Err(e),
                                 Err((ch, e)) => {
@@ -152,14 +154,12 @@ impl BlockTask for HyprLand {
                 ));
                 listener.add_workspace_destroy_handler(handler(
                     &state,
-                    move |state, ws: WorkspaceType| async move {
-                        if let WorkspaceType::Regular(ws_name) = ws {
-                            let mut state = state.lock().await;
-                            state.ws.retain(|ws| ws.name != ws_name);
-                            if let Err(e) = state.emit().await {
-                                log::error!("failed to emit event: {e:?}");
-                            };
-                        }
+                    move |state, event: WorkspaceDestroyedEventData| async move {
+                        let mut state = state.lock().await;
+                        state.ws.retain(|ws| ws.name != event.workspace_name);
+                        if let Err(e) = state.emit().await {
+                            log::error!("failed to emit event: {e:?}");
+                        };
                     },
                 ));
                 listener.add_workspace_change_handler(handler(
@@ -254,21 +254,31 @@ impl Monitor {
     async fn new(
         sender: UpdateChannel,
         block_id: BlockId,
-        monitor: u8,
+        monitor: i128,
     ) -> Result<
         (Self, oneshot::Receiver<CancelationError>),
         (UpdateChannel, hyprland::shared::HyprError),
     > {
         let data = tokio::try_join!(
-            Workspaces::get_async(),
-            Clients::get_async(),
-            hyprland::data::Monitor::get_active_async()
+            Workspaces::get_async().map_err(|e| {
+                log::error!("getting workspaces failed: {e:?}");
+                e
+            }),
+            Clients::get_async().map_err(|e| {
+                log::error!("getting clients failed: {e:?}");
+                e
+            }),
+            hyprland::data::Monitor::get_active_async().map_err(|e| {
+                log::error!("getting monitor failed: {e:?}");
+                e
+            })
         );
         let (ws, clients, active_monitor) = match data {
             Ok(x) => x,
             Err(e) => return Err((sender, e)),
         };
         let mut ws = ws
+            .into_iter()
             .filter(|w| w.id > 0)
             .filter(|w| w.monitor_id == monitor)
             .map(|w| Ws {
@@ -296,10 +306,10 @@ impl Monitor {
             Self {
                 visible_ws: ws.first().map(|w| w.id),
                 ws,
-                is_focused: active_monitor.id == i128::from(monitor),
+                is_focused: active_monitor.id == monitor,
                 sender,
                 block_id,
-                monitor,
+                monitor: monitor.try_into().unwrap(),
                 cancelation: Some(cancelation_tx),
             },
             cancelation_rx,
@@ -321,10 +331,14 @@ impl Monitor {
         match self.ws.iter().position(|ws| ws.name == name) {
             Some(idx) => return Ok(self.ws.get_mut(idx)),
             None => {
-                let Some(new_ws) = Workspaces::get_async().await?.find(|w| w.name == name) else {
+                let Some(new_ws) = Workspaces::get_async()
+                    .await?
+                    .into_iter()
+                    .find(|w| w.name == name)
+                else {
                     return Ok(None);
                 };
-                if new_ws.monitor_id == self.monitor {
+                if new_ws.monitor_id == self.monitor.into() {
                     self.ws.push(Ws {
                         id: new_ws.id,
                         name: new_ws.name,
@@ -418,7 +432,7 @@ impl Monitor {
     }
 }
 
-fn handler<D, F, Fut>(state: &Arc<Mutex<Monitor>>, f: F) -> impl Fn(D) -> BoxFuture<'static, ()>
+fn handler<D, F, Fut>(state: &Arc<Mutex<Monitor>>, f: F) -> impl Fn(D) -> VoidFuture
 where
     F: Fn(Arc<Mutex<Monitor>>, D) -> Fut + Send,
     D: Send + 'static,
