@@ -192,7 +192,9 @@ pub async fn start_event_loop<B>(
     while let Some(update) = updates.recv().await {
         let (_, _, monitor) = update.id();
         if !config.update(update) {
-            continue;
+            // TODO: we could save an update, but zelbar is bugged and so redundant updates
+            // actually fix it
+            // continue;
         }
         match lemon_inputs.get_mut(monitor as usize) {
             Some(input) => {
