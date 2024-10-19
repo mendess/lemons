@@ -10,6 +10,7 @@ impl super::BlockTask for Static {
     fn start(&self, events: &broadcast::Sender<Event>, data: TaskData) {
         let mut events = events.subscribe();
         let TaskData {
+            block_name,
             cmd,
             monitors,
             bid,
@@ -28,7 +29,7 @@ impl super::BlockTask for Static {
                 match e {
                     Event::MouseClicked(id, mon, button) if id == bid => {
                         if let Some(a) = actions[button] {
-                            let _ = run_cmd(a, mon, current_layer()).await;
+                            let _ = run_cmd(block_name, a, mon, current_layer()).await;
                         }
                     }
                     Event::Signal | Event::NewLayer | Event::MouseClicked(..) => {}

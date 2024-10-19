@@ -7,9 +7,9 @@ use crate::{
     global_config,
     model::{
         block::{self, Block, BlockId, BlockText, BlockUpdate},
-        Alignment, Config,
+        Alignment, Config, Layer,
     },
-    util::one_or_more::OneOrMore,
+    util::{cmd::child_debug_loop, one_or_more::OneOrMore},
 };
 use enum_iterator::IntoEnumIterator;
 use std::{
@@ -69,7 +69,7 @@ pub enum Event {
     MouseClicked(BlockId, u8, MouseButton),
 }
 
-fn spawn_bar<A, S, W, B>(args: A) -> (Child, ChildStdin, ChildStdout)
+fn spawn_bar<A, S, W, B>(args: A, monitor: u8) -> (Child, ChildStdin, ChildStdout)
 where
     A: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -93,10 +93,19 @@ where
         lemonbar
     };
 
-    lemonbar.stdin(Stdio::piped()).stdout(Stdio::piped());
+    lemonbar
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let mut lemonbar = lemonbar.spawn().expect("Couldn't start lemonbar");
 
+    child_debug_loop(
+        lemonbar.stderr.take().unwrap(),
+        B::PROGRAM,
+        monitor,
+        Layer::All,
+    );
     let (le_in, le_out) = (
         lemonbar.stdin.take().expect("Failed to find lemon stdin"),
         lemonbar.stdout.take().expect("Failed to find lemon stdout"),
@@ -171,7 +180,7 @@ pub async fn start_event_loop<B>(
     let global_config = crate::global_config::get();
     let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.outputs.is_empty() {
         let (bar, lemon_inputs, lemon_outputs) =
-            spawn_bar::<_, _, _, B>(&global_config.to_arg_list::<_, B>(None));
+            spawn_bar::<_, _, _, B>(&global_config.to_arg_list::<_, B>(None), 0);
         (vec![bar], vec![lemon_inputs], vec![lemon_outputs])
     } else {
         unzip_n::unzip_n!(3);
@@ -179,7 +188,8 @@ pub async fn start_event_loop<B>(
             .outputs
             .iter()
             .map(|g| global_config.to_arg_list::<_, B>(Some(g)))
-            .map(spawn_bar::<_, _, _, B>)
+            .enumerate()
+            .map(|(i, args)| spawn_bar::<_, _, _, B>(args, i as u8))
             .unzip_n()
     };
     let events = Arc::new(Mutex::new(events));
@@ -205,6 +215,8 @@ pub async fn start_event_loop<B>(
                 }
             }
             None => {
+                // TODO: 255 is used as a magic value to trigger this behaviour. Have a
+                // newtype to improve the readability of this.
                 for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
                     line = build_line::<B>(&config, monitor as _, line);
                     log::trace!("{monitor} => {line}");

@@ -1,4 +1,7 @@
-use super::{parser::KeyValues, ParseError, Result};
+use super::{
+    parser::{KeyValues, Title},
+    ParseError, Result,
+};
 use crate::{
     event_loop::Event,
     global_config,
@@ -55,6 +58,7 @@ enum BlockType {
 //
 impl Block<'static> {
     pub fn from_kvs(
+        title: Title<'static>,
         n_monitors: NonZeroU8,
         indexes: &mut Indexes,
         iter: KeyValues<'static, '_>,
@@ -219,6 +223,7 @@ impl Block<'static> {
             task.start(
                 broadcast,
                 TaskData {
+                    block_name: title.title,
                     cmd: value,
                     updates: responses.into(),
                     actions,

@@ -96,6 +96,7 @@ impl Signal {
 }
 
 pub struct TaskData {
+    pub block_name: &'static str,
     pub cmd: &'static str,
     pub updates: UpdateChannel,
     pub actions: Actions<'static>,

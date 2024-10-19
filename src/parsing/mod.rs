@@ -71,8 +71,15 @@ pub fn parse(
         })
         .map(NonZeroU8::new)?
         .unwrap_or_else(|| NonZeroU8::new(1).unwrap());
-    while let Some((_, kvs)) = parser.next_section()? {
-        let block = Block::from_kvs(bar_spec_count, &mut indexes, kvs, broadcast, responses)?;
+    while let Some((title, kvs)) = parser.next_section()? {
+        let block = Block::from_kvs(
+            title,
+            bar_spec_count,
+            &mut indexes,
+            kvs,
+            broadcast,
+            responses,
+        )?;
         if let Layer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);
         }

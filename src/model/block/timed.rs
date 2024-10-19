@@ -21,6 +21,7 @@ impl super::BlockTask for Timed {
         let timeout = self.0;
         let mut events = events.subscribe();
         let TaskData {
+            block_name,
             cmd,
             updates,
             actions,
@@ -45,7 +46,7 @@ impl super::BlockTask for Timed {
                         }
                     };
                     while signals.recv().await.is_some() {
-                        if update_blocks(cmd, activation_layer, bid, monitors, &updates)
+                        if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
                             .await
                             .is_err()
                         {
@@ -56,7 +57,7 @@ impl super::BlockTask for Timed {
             });
         }
         tokio::spawn(async move {
-            if update_blocks(cmd, activation_layer, bid, monitors, &updates)
+            if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
                 .await
                 .is_err()
             {
@@ -72,7 +73,7 @@ impl super::BlockTask for Timed {
                     match event {
                         Ok(Event::MouseClicked(id, mon, button)) if id == bid => {
                             if let Some(a) = actions[button] {
-                                let _ = run_cmd(a, mon, current_layer()).await;
+                                let _ = run_cmd(block_name, a, mon, current_layer()).await;
                             }
                             continue;
                         }
@@ -82,7 +83,7 @@ impl super::BlockTask for Timed {
                         Err(_) => return,
                     }
                 }
-                if update_blocks(cmd, activation_layer, bid, monitors, &updates)
+                if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
                     .await
                     .is_err()
                 {
@@ -94,6 +95,7 @@ impl super::BlockTask for Timed {
 }
 
 async fn update_blocks(
+    block_name: &'static str,
     cmd: &'static str,
     activation_layer: Layer,
     bid: BlockId,
@@ -103,7 +105,7 @@ async fn update_blocks(
     let layer = current_layer();
     if activation_layer == layer {
         for m in monitors.iter() {
-            let mut output = run_cmd(cmd, m, layer)
+            let mut output = run_cmd(block_name, cmd, m, layer)
                 .await
                 .map_err(|e| e.to_string())
                 .merge();
