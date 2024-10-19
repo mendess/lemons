@@ -21,7 +21,7 @@ impl super::BlockTask for Static {
         tokio::spawn(async move {
             stream::iter(monitors.iter())
                 .fold(updates, |updates, mon| async move {
-                    let _ = updates.send((cmd.to_owned(), bid, mon).into()).await;
+                    let _ = updates.send((cmd.to_owned(), bid, mon)).await;
                     updates
                 })
                 .await;
@@ -29,7 +29,7 @@ impl super::BlockTask for Static {
                 match e {
                     Event::MouseClicked(id, mon, button) if id == bid => {
                         if let Some(a) = actions[button] {
-                            let _ = run_cmd(block_name, a, mon, current_layer()).await;
+                            let _ = run_cmd(block_name, a, mon.into(), current_layer()).await;
                         }
                     }
                     Event::Signal | Event::NewLayer | Event::MouseClicked(..) => {}

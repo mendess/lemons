@@ -37,7 +37,12 @@ impl BlockTask for HyprLand {
             ..
         }: TaskData,
     ) {
-        for mon in monitors {
+        for mon in monitors.iter().map(|m| match m {
+            crate::model::AffectedMonitor::Single(n) => n,
+            crate::model::AffectedMonitor::All => {
+                unreachable!("multi_monitor should always be enabled for this block")
+            }
+        }) {
             let mut updates = updates.clone();
             tokio::spawn(async move {
                 let (state, cancelation) = {
@@ -53,7 +58,7 @@ impl BlockTask for HyprLand {
                                     let error_update =
                                         (format!("failed to get monitor: {e}"), bid, mon);
                                     updates
-                                        .send(error_update.into())
+                                        .send(error_update)
                                         .await
                                         .expect("failed to send block update");
                                     log::error!("failed getting monitor {e:?}");
@@ -420,7 +425,7 @@ impl Monitor {
                 text,
                 alignment: self.block_id.0,
                 index: self.block_id.1,
-                monitor: self.monitor,
+                monitor: self.monitor.into(),
             })
             .await
         {

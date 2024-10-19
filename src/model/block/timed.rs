@@ -73,7 +73,7 @@ impl super::BlockTask for Timed {
                     match event {
                         Ok(Event::MouseClicked(id, mon, button)) if id == bid => {
                             if let Some(a) = actions[button] {
-                                let _ = run_cmd(block_name, a, mon, current_layer()).await;
+                                let _ = run_cmd(block_name, a, mon.into(), current_layer()).await;
                             }
                             continue;
                         }
@@ -110,10 +110,7 @@ async fn update_blocks(
                 .map_err(|e| e.to_string())
                 .merge();
             trim_new_lines(&mut output);
-            updates
-                .send((output, bid, m).into())
-                .await
-                .map_err(|_| ())?
+            updates.send((output, bid, m)).await.map_err(|_| ())?
         }
     }
     Ok(())

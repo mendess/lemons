@@ -1,4 +1,4 @@
-use super::Color;
+use super::{AffectedMonitor, Color};
 use crate::{
     display::{Bar, CmdlineArgBuilder, Program},
     util::number_as_str,
@@ -88,7 +88,7 @@ impl<'a> GlobalConfig<'a> {
 
     pub fn as_env_vars(
         &self,
-        monitor: u8,
+        monitor: AffectedMonitor,
         layer: u16,
     ) -> impl Iterator<Item = (&str, Cow<'_, OsStr>)> {
         let color = |c: &Option<Color>| {
@@ -100,7 +100,13 @@ impl<'a> GlobalConfig<'a> {
             .chain(once(("LEMON_UN", color(&self.underline))))
             .chain(once((
                 "LEMON_MONITOR",
-                Cow::Borrowed(number_as_str(monitor).as_ref()),
+                Cow::Borrowed(
+                    match monitor {
+                        AffectedMonitor::All => "all",
+                        AffectedMonitor::Single(n) => number_as_str(n),
+                    }
+                    .as_ref(),
+                ),
             )))
             .chain(once((
                 "LEMON_LAYER",

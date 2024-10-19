@@ -3,7 +3,7 @@ use crate::{
     event_loop::{current_layer, Event, MouseButton},
     model::{
         block::{BlockText, TextDecorations},
-        Color,
+        AffectedMonitor, Color,
     },
 };
 use futures::stream::StreamExt;
@@ -40,7 +40,11 @@ impl BlockTask for Music {
                     .as_ref()
                     .map(BarData::to_decorated_text)
                     .unwrap_or_default();
-                if updates.send((data, bid, u8::MAX).into()).await.is_err() {
+                if updates
+                    .send((data, bid, AffectedMonitor::All))
+                    .await
+                    .is_err()
+                {
                     log::warn!("native music block shutting down");
                     break;
                 }

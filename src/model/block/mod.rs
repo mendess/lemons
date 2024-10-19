@@ -4,7 +4,7 @@ pub mod persistent;
 pub mod signal_task;
 pub mod timed;
 
-use super::{ActivationLayer, ActiveMonitors, Alignment, Color};
+use super::{ActivationLayer, ActiveMonitors, AffectedMonitor, Alignment, Color};
 use crate::event_loop::{update_channel::UpdateChannel, Event, MouseButton};
 use derive_builder::Builder;
 use std::{
@@ -40,13 +40,13 @@ pub struct BlockUpdate {
     text: Vec<BlockText>,
     alignment: Alignment,
     index: usize,
-    monitor: u8,
+    monitor: AffectedMonitor,
 }
 
 pub type BlockId = (Alignment, usize);
 
-impl From<(String, BlockId, u8)> for BlockUpdate {
-    fn from((text, (alignment, index), monitor): (String, BlockId, u8)) -> Self {
+impl<M: Into<AffectedMonitor>> From<(String, BlockId, M)> for BlockUpdate {
+    fn from((text, (alignment, index), monitor): (String, BlockId, M)) -> Self {
         Self {
             text: vec![BlockText {
                 decorations: Default::default(),
@@ -54,18 +54,18 @@ impl From<(String, BlockId, u8)> for BlockUpdate {
             }],
             alignment,
             index,
-            monitor,
+            monitor: monitor.into(),
         }
     }
 }
 
-impl From<(Vec<BlockText>, BlockId, u8)> for BlockUpdate {
-    fn from((text, (alignment, index), monitor): (Vec<BlockText>, BlockId, u8)) -> Self {
+impl<M: Into<AffectedMonitor>> From<(Vec<BlockText>, BlockId, M)> for BlockUpdate {
+    fn from((text, (alignment, index), monitor): (Vec<BlockText>, BlockId, M)) -> Self {
         Self {
             text,
             alignment,
             index,
-            monitor,
+            monitor: monitor.into(),
         }
     }
 }
@@ -77,7 +77,7 @@ impl BlockUpdate {
 }
 
 impl BlockUpdate {
-    pub fn id(&self) -> (Alignment, usize, u8) {
+    pub fn id(&self) -> (Alignment, usize, AffectedMonitor) {
         (self.alignment, self.index, self.monitor)
     }
 }

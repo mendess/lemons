@@ -2,7 +2,7 @@ use super::{Event, TaskData};
 use crate::{
     event_loop::current_layer,
     global_config,
-    model::ActivationLayer,
+    model::{ActivationLayer, AffectedMonitor},
     util::{
         cmd::{self, child_debug_loop},
         trim_new_lines,
@@ -51,7 +51,7 @@ impl super::BlockTask for Persistent {
                             Some(l) = output.next() => {
                                 if let Ok(mut l) = l {
                                     trim_new_lines(&mut l);
-                                    if updates.send((l, bid, mon).into()).await.is_err() {
+                                    if updates.send((l, bid, mon)).await.is_err() {
                                         break
                                     }
                                 }
@@ -60,7 +60,7 @@ impl super::BlockTask for Persistent {
                                 match e {
                                     Event::MouseClicked(id, mon, button) if id == bid => {
                                         if let Some(a) = actions[button] {
-                                            let _ = cmd::run_cmd(block_name, a, mon, current_layer()).await;
+                                            let _ = cmd::run_cmd(block_name, a, mon.into(), current_layer()).await;
                                         }
                                     }
                                     Event::MouseClicked(..)
@@ -101,7 +101,7 @@ impl Stream for ChildStream {
 async fn run_cmd(
     block_name: &'static str,
     cmd: &str,
-    monitor: u8,
+    monitor: AffectedMonitor,
     layer: u16,
 ) -> io::Result<impl Stream<Item = io::Result<String>>> {
     let mut spawned = Command::new("bash")

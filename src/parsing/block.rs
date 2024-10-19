@@ -213,10 +213,16 @@ impl Block<'static> {
                     ))
                 }
                 BlockType::Persistent => Box::new(block::persistent::Persistent),
-                BlockType::Native => match block::native::new(value) {
-                    Some(b) => b,
-                    None => return Err(ParseError::InvalidNative(value)),
-                },
+                BlockType::Native => {
+                    #[cfg(feature = "hyprland")]
+                    if value == block::native::native_block::HYPRLAND {
+                        block_b.active_in(ActiveMonitors::MonitorCount(n_monitors));
+                    }
+                    match block::native::new(value) {
+                        Some(b) => b,
+                        None => return Err(ParseError::InvalidNative(value)),
+                    }
+                }
             };
             let bid = (block.alignment, indexes.get(block.alignment));
             log::info!("Starting task {:?}({}) {:?}", task, value, bid);

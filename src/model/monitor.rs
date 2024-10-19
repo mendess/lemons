@@ -1,6 +1,8 @@
-use std::{num::NonZeroU8, ops::RangeInclusive};
+use std::num::NonZeroU8;
 
 use crate::util::one_or_more::OneOrMore;
+
+use super::AffectedMonitor;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ActiveMonitors {
@@ -21,18 +23,17 @@ impl ActiveMonitors {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = u8> {
-        self.into_iter()
-    }
-}
-
-impl IntoIterator for ActiveMonitors {
-    type IntoIter = RangeInclusive<u8>;
-    type Item = u8;
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
+    pub fn iter(&self) -> impl Iterator<Item = AffectedMonitor> {
+        let u8_range = match self {
             Self::All => u8::MAX..=u8::MAX,
             Self::MonitorCount(m) => 0..=(m.get() - 1),
-        }
+        };
+        u8_range.map(|m| {
+            if m == u8::MAX {
+                AffectedMonitor::All
+            } else {
+                AffectedMonitor::Single(m)
+            }
+        })
     }
 }

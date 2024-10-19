@@ -38,7 +38,13 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
                         Ok(_) => {
                             let buf = buf.trim();
                             if buf == ":" {
-                                let _ = cmd::run_cmd("action-task", buf, 0, current_layer()).await;
+                                let _ = cmd::run_cmd(
+                                    "action-task",
+                                    buf,
+                                    crate::model::AffectedMonitor::All,
+                                    current_layer(),
+                                )
+                                .await;
                                 continue;
                             } else {
                                 log::trace!("lembar output: '{buf}'");
@@ -52,9 +58,13 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
                                                 e
                                             );
                                         }
-                                        let _ =
-                                            cmd::run_cmd("action-task", buf, 0, current_layer())
-                                                .await;
+                                        let _ = cmd::run_cmd(
+                                            "action-task",
+                                            buf,
+                                            crate::model::AffectedMonitor::All,
+                                            current_layer(),
+                                        )
+                                        .await;
                                         continue;
                                     }
                                 }

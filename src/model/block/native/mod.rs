@@ -3,12 +3,19 @@ mod clock;
 mod hyprland;
 mod music;
 
+pub mod native_block {
+    pub const M: &str = "m";
+    pub const CLOCK: &str = "clock";
+    #[cfg(feature = "hyprland")]
+    pub const HYPRLAND: &str = "hyprland";
+}
+
 pub fn new(cmd: &'static str) -> Option<Box<dyn super::BlockTask>> {
     match cmd {
-        "m" => Some(Box::new(music::Music)),
-        "clock" => Some(Box::new(clock::Clock)),
+        native_block::M => Some(Box::new(music::Music)),
+        native_block::CLOCK => Some(Box::new(clock::Clock)),
         #[cfg(feature = "hyprland")]
-        "hyprland" => Some(Box::new(hyprland::HyprLand)),
+        native_block::HYPRLAND => Some(Box::new(hyprland::HyprLand)),
         _ => None,
     }
 }

@@ -7,6 +7,7 @@ pub mod monitor;
 pub use alignment::Alignment;
 use block::Block;
 pub use color::Color;
+use core::fmt;
 pub use monitor::ActiveMonitors;
 use std::ops::{Index, IndexMut};
 
@@ -72,5 +73,44 @@ impl ActivationLayer {
 impl Default for ActivationLayer {
     fn default() -> Self {
         Self::All
+    }
+}
+
+impl fmt::Display for ActivationLayer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::L(n) => write!(f, "{n}"),
+            Self::All => write!(f, "all"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AffectedMonitor {
+    All,
+    Single(u8),
+}
+
+impl From<u8> for AffectedMonitor {
+    fn from(value: u8) -> Self {
+        Self::Single(value)
+    }
+}
+
+impl AffectedMonitor {
+    pub fn single(self) -> Option<u8> {
+        match self {
+            Self::All => None,
+            Self::Single(s) => Some(s),
+        }
+    }
+}
+
+impl fmt::Display for AffectedMonitor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Single(n) => write!(f, "{n}"),
+            Self::All => write!(f, "all"),
+        }
     }
 }

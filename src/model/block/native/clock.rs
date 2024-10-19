@@ -8,7 +8,10 @@ use tokio::{
 
 use crate::{
     event_loop::{current_layer, Event},
-    model::block::{BlockTask, TaskData},
+    model::{
+        block::{BlockTask, TaskData},
+        AffectedMonitor,
+    },
 };
 
 #[derive(Debug)]
@@ -27,7 +30,11 @@ impl BlockTask for Clock {
                         "%a %d %b %T %Z %Y"
                     })
                     .to_string();
-                if updates.send((out, bid, u8::MAX).into()).await.is_err() {
+                if updates
+                    .send((out, bid, AffectedMonitor::All))
+                    .await
+                    .is_err()
+                {
                     log::info!("clock shutting down")
                 }
                 match timeout(dur_to_next_tick(layer), events.recv()).await {

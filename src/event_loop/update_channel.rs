@@ -17,7 +17,7 @@ impl From<&Sender<BlockUpdate>> for UpdateChannel {
 }
 
 impl UpdateChannel {
-    pub async fn send(&self, u: BlockUpdate) -> Result<(), SendError<BlockUpdate>> {
-        self.0.send(u).await
+    pub async fn send(&self, u: impl Into<BlockUpdate>) -> Result<(), SendError<BlockUpdate>> {
+        self.0.send(u.into()).await
     }
 }

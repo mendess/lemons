@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "lemon"
-version = "4.3.12"
+version = "4.3.13"
 dependencies = [
  "arc-swap",
  "array-init",

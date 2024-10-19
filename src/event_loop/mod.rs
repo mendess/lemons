@@ -7,7 +7,7 @@ use crate::{
     global_config,
     model::{
         block::{self, Block, BlockId, BlockText, BlockUpdate},
-        ActivationLayer, Alignment, Config,
+        ActivationLayer, AffectedMonitor, Alignment, Config,
     },
     util::{cmd::child_debug_loop, one_or_more::OneOrMore},
 };
@@ -103,7 +103,7 @@ where
     child_debug_loop(
         lemonbar.stderr.take().unwrap(),
         B::PROGRAM,
-        monitor,
+        monitor.into(),
         ActivationLayer::All,
     );
     let (le_in, le_out) = (
@@ -158,7 +158,12 @@ impl IndexMut<Alignment> for RunningConfig {
 impl RunningConfig {
     pub fn update(&mut self, update: block::BlockUpdate) -> bool {
         let (alignment, index, monitor) = update.id();
-        let block = &mut self[alignment][index].last_run[monitor];
+        // if we have to update something that affects all monitors than we assume that `last_run`
+        // in the `OneOrMore::One` state.
+        let block = &mut self[alignment][index].last_run[match monitor {
+            AffectedMonitor::Single(n) => n,
+            AffectedMonitor::All => u8::MAX,
+        }];
         let new_block = update.into_inner_text();
         if *block != new_block {
             log::debug!("bar update '{new_block:?}' from {:?}", (alignment, index));
@@ -206,17 +211,18 @@ pub async fn start_event_loop<B>(
             // actually fix it
             // continue;
         }
-        match lemon_inputs.get_mut(monitor as usize) {
-            Some(input) => {
-                line = build_line::<B>(&config, monitor, line);
-                log::trace!("{monitor} => {line}");
-                if let Err(e) = input.write_all(line.as_bytes()).await {
-                    log::error!("Couldn't talk to lemon bar :( {:?}", e);
+        match monitor {
+            AffectedMonitor::Single(m) => match lemon_inputs.get_mut(usize::from(m)) {
+                Some(input) => {
+                    line = build_line::<B>(&config, m, line);
+                    log::trace!("{m} => {line}");
+                    if let Err(e) = input.write_all(line.as_bytes()).await {
+                        log::error!("Couldn't talk to lemon bar :( {:?}", e);
+                    }
                 }
-            }
-            None => {
-                // TODO: 255 is used as a magic value to trigger this behaviour. Have a
-                // newtype to improve the readability of this.
+                None => log::error!("monitor: {m} is out of bounds"),
+            },
+            AffectedMonitor::All => {
                 for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
                     line = build_line::<B>(&config, monitor as _, line);
                     log::trace!("{monitor} => {line}");

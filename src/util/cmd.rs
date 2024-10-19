@@ -1,4 +1,7 @@
-use crate::{global_config, model::ActivationLayer};
+use crate::{
+    global_config,
+    model::{ActivationLayer, AffectedMonitor},
+};
 use std::process::Stdio;
 use tokio::{
     io::{self, AsyncBufReadExt as _, BufReader},
@@ -9,7 +12,7 @@ use tokio_stream::{wrappers::LinesStream, StreamExt};
 pub async fn run_cmd(
     source_block_name: &'static str,
     cmd: &str,
-    monitor: u8,
+    monitor: AffectedMonitor,
     layer: u16,
 ) -> io::Result<String> {
     let mut spawned = Command::new("bash")
@@ -41,14 +44,14 @@ pub async fn run_cmd(
 pub fn child_debug_loop(
     stderr: ChildStderr,
     name: &'static str,
-    monitor: u8,
+    monitor: AffectedMonitor,
     layer: ActivationLayer,
 ) {
     if log::log_enabled!(log::Level::Debug) {
         tokio::spawn(async move {
             let mut stderr = LinesStream::new(BufReader::new(stderr).lines());
             while let Some(line) = stderr.next().await.transpose()? {
-                log::debug!("[stderr of {name} @ mon:{monitor} in layer:{layer:?}] {line}")
+                log::debug!("[stderr of {name} @ mon:{monitor} in layer:{layer}] {line}")
             }
 
             Ok::<_, io::Error>(())
