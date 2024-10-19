@@ -7,7 +7,7 @@ use crate::{
     global_config,
     model::{
         block::{self, *},
-        ActiveMonitors, Alignment, Indexes, Layer,
+        ActivationLayer, ActiveMonitors, Alignment, Indexes,
     },
     util::signal::valid_rt_signum,
 };
@@ -28,7 +28,7 @@ impl FromStr for Alignment {
     }
 }
 
-impl FromStr for Layer {
+impl FromStr for ActivationLayer {
     type Err = &'static str;
     fn from_str(s: &str) -> StdResult<Self, Self::Err> {
         match s {

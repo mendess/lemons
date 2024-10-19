@@ -4,7 +4,7 @@ pub mod persistent;
 pub mod signal_task;
 pub mod timed;
 
-use super::{ActiveMonitors, Alignment, Color, Layer};
+use super::{ActivationLayer, ActiveMonitors, Alignment, Color};
 use crate::event_loop::{update_channel::UpdateChannel, Event, MouseButton};
 use derive_builder::Builder;
 use std::{
@@ -101,7 +101,7 @@ pub struct TaskData {
     pub updates: UpdateChannel,
     pub actions: Actions<'static>,
     pub bid: BlockId,
-    pub activation_layer: Layer,
+    pub activation_layer: ActivationLayer,
     pub monitors: ActiveMonitors,
     pub signal: Signal,
 }
@@ -178,7 +178,7 @@ pub struct Block<'a> {
     #[builder(default)]
     pub raw: bool,
     #[builder(default)]
-    pub layer: Layer,
+    pub layer: ActivationLayer,
 
     pub alignment: Alignment,
 

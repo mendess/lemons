@@ -9,7 +9,7 @@ use crate::{
     display::Program,
     event_loop::Event,
     global_config::GlobalConfig,
-    model::Layer,
+    model::ActivationLayer,
     model::{
         block::{Block, BlockUpdate},
         Indexes,
@@ -80,7 +80,7 @@ pub fn parse(
             broadcast,
             responses,
         )?;
-        if let Layer::L(l) = block.layer {
+        if let ActivationLayer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);
         }
         blocks[block.alignment].push(block);

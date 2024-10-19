@@ -7,7 +7,7 @@ use crate::{
     global_config,
     model::{
         block::{self, Block, BlockId, BlockText, BlockUpdate},
-        Alignment, Config, Layer,
+        ActivationLayer, Alignment, Config,
     },
     util::{cmd::child_debug_loop, one_or_more::OneOrMore},
 };
@@ -104,7 +104,7 @@ where
         lemonbar.stderr.take().unwrap(),
         B::PROGRAM,
         monitor,
-        Layer::All,
+        ActivationLayer::All,
     );
     let (le_in, le_out) = (
         lemonbar.stdin.take().expect("Failed to find lemon stdin"),

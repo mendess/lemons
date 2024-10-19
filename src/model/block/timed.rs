@@ -1,5 +1,5 @@
 use super::{
-    super::{ActiveMonitors, Layer},
+    super::{ActivationLayer, ActiveMonitors},
     BlockId, Event, Signal, TaskData,
 };
 use crate::{
@@ -97,7 +97,7 @@ impl super::BlockTask for Timed {
 async fn update_blocks(
     block_name: &'static str,
     cmd: &'static str,
-    activation_layer: Layer,
+    activation_layer: ActivationLayer,
     bid: BlockId,
     monitors: ActiveMonitors,
     updates: &UpdateChannel,

@@ -2,7 +2,7 @@ use super::{Event, TaskData};
 use crate::{
     event_loop::current_layer,
     global_config,
-    model::Layer,
+    model::ActivationLayer,
     util::{
         cmd::{self, child_debug_loop},
         trim_new_lines,
@@ -115,7 +115,7 @@ async fn run_cmd(
         spawned.stderr.take().unwrap(),
         block_name,
         monitor,
-        Layer::L(layer),
+        ActivationLayer::L(layer),
     );
     Ok(ChildStream {
         stream: LinesStream::new(

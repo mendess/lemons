@@ -1,4 +1,4 @@
-use crate::{global_config, model::Layer};
+use crate::{global_config, model::ActivationLayer};
 use std::process::Stdio;
 use tokio::{
     io::{self, AsyncBufReadExt as _, BufReader},
@@ -26,7 +26,7 @@ pub async fn run_cmd(
         spawned.stderr.take().unwrap(),
         source_block_name,
         monitor,
-        Layer::L(layer),
+        ActivationLayer::L(layer),
     );
     let output = spawned.wait_with_output().await?;
     if !output.status.success() {
@@ -38,7 +38,12 @@ pub async fn run_cmd(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-pub fn child_debug_loop(stderr: ChildStderr, name: &'static str, monitor: u8, layer: Layer) {
+pub fn child_debug_loop(
+    stderr: ChildStderr,
+    name: &'static str,
+    monitor: u8,
+    layer: ActivationLayer,
+) {
     if log::log_enabled!(log::Level::Debug) {
         tokio::spawn(async move {
             let mut stderr = LinesStream::new(BufReader::new(stderr).lines());
