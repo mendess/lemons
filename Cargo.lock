@@ -539,8 +539,8 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyprland"
-version = "0.4.0-alpha.2"
-source = "git+https://github.com/hyprland-community/hyprland-rs?rev=96f8f768aa7e203e0c3239f01943a7ce9ee35247#96f8f768aa7e203e0c3239f01943a7ce9ee35247"
+version = "0.4.0-alpha.3"
+source = "git+https://github.com/hyprland-community/hyprland-rs?rev=7bbcd08360dce6977b0bfee708339f0250ccae68#7bbcd08360dce6977b0bfee708339f0250ccae68"
 dependencies = [
  "ahash",
  "derive_more",
@@ -557,8 +557,8 @@ dependencies = [
 
 [[package]]
 name = "hyprland-macros"
-version = "0.4.0-alpha.2"
-source = "git+https://github.com/hyprland-community/hyprland-rs?rev=96f8f768aa7e203e0c3239f01943a7ce9ee35247#96f8f768aa7e203e0c3239f01943a7ce9ee35247"
+version = "0.4.0-alpha.3"
+source = "git+https://github.com/hyprland-community/hyprland-rs?rev=7bbcd08360dce6977b0bfee708339f0250ccae68#7bbcd08360dce6977b0bfee708339f0250ccae68"
 dependencies = [
  "quote",
  "syn 2.0.71",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "lemon"
-version = "4.3.11"
+version = "4.3.12"
 dependencies = [
  "arc-swap",
  "array-init",

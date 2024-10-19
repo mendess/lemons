@@ -1,5 +1,9 @@
 use super::{Event, TaskData};
-use crate::{event_loop::current_layer, global_config, util::{cmd, trim_new_lines}};
+use crate::{
+    event_loop::current_layer,
+    global_config,
+    util::{cmd, trim_new_lines},
+};
 use futures::stream::{Stream, StreamExt};
 use std::process::Stdio;
 use tokio::{

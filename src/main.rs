@@ -39,10 +39,7 @@ async fn main() -> io::Result<()> {
     let input = args
         .config
         .ok_or(io::ErrorKind::NotFound)
-        .map(|cfg| {
-            log::info!("Loading config from command line");
-            cfg
-        })
+        .inspect(|_| log::info!("Loading config from command line"))
         .or_else(|_| {
             env::var_os("XDG_CONFIG_HOME")
                 .ok_or(io::ErrorKind::NotFound)
