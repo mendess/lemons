@@ -3,25 +3,24 @@ use crate::{
     model::{block::BlockId, Alignment},
     util::cmd,
 };
+use futures::{stream, StreamExt};
 use std::{
     fmt::{self, Display},
     str::FromStr,
-    sync::Arc,
 };
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::ChildStdout,
-    sync::{broadcast::Sender, Mutex},
-    task,
+    sync::broadcast::Sender,
 };
 
-pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
-    outputs.into_iter().for_each(|out| {
-        task::spawn({
+pub async fn run(outputs: Vec<ChildStdout>, events: Sender<Event>) {
+    stream::iter(outputs)
+        .for_each_concurrent(None, |out| {
             let events = events.clone();
-            let mut out = BufReader::new(out);
-            let mut buf = String::new();
             async move {
+                let mut out = BufReader::new(out);
+                let mut buf = String::new();
                 loop {
                     buf.clear();
                     let action = match out.read_line(&mut buf).await {
@@ -75,13 +74,13 @@ pub fn run(outputs: Vec<ChildStdout>, events: Arc<Mutex<Sender<Event>>>) {
                             continue;
                         }
                     };
-                    if events.lock().await.send(action.into()).is_err() {
+                    if events.send(action.into()).is_err() {
                         break;
                     }
                 }
             }
-        });
-    });
+        })
+        .await;
 }
 
 pub struct Action {

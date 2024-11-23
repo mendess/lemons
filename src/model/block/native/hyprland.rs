@@ -1,7 +1,7 @@
 use core::fmt;
 use std::sync::Arc;
 
-use futures::{FutureExt, TryFutureExt};
+use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryFutureExt};
 use hyprland::{
     data::{Clients, Workspaces},
     event_listener::{
@@ -13,7 +13,7 @@ use hyprland::{
 use tokio::sync::{broadcast, oneshot, Mutex};
 
 use crate::{
-    event_loop::{update_channel::UpdateChannel, Event},
+    event_loop::{update_task::UpdateChannel, Event},
     global_config,
     model::{
         block::{BlockId, BlockTask, TaskData, TextDecorations},
@@ -21,30 +21,36 @@ use crate::{
     },
 };
 
-pub(crate) type VoidFuture = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+pub(crate) type VoidFuture = BoxFuture<'static, ()>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct HyprLand;
 
 impl BlockTask for HyprLand {
-    fn start(
-        &self,
-        _events: &broadcast::Sender<Event>,
-        TaskData {
-            updates,
-            bid,
-            monitors,
-            ..
-        }: TaskData,
-    ) {
-        for mon in monitors.iter().map(|m| match m {
+    fn start(&self, events: broadcast::Receiver<Event>, td: TaskData) -> BoxFuture<'static, ()> {
+        start(events, td).boxed()
+    }
+}
+
+async fn start(
+    mut events: broadcast::Receiver<Event>,
+    TaskData {
+        updates,
+        bid,
+        monitors,
+        ..
+    }: TaskData,
+) {
+    let hypr = stream::iter(monitors.iter())
+        .map(|m| match m {
             crate::model::AffectedMonitor::Single(n) => n,
             crate::model::AffectedMonitor::All => {
                 unreachable!("multi_monitor should always be enabled for this block")
             }
-        }) {
+        })
+        .map(|mon| {
             let mut updates = updates.clone();
-            tokio::spawn(async move {
+            async move {
                 let (state, cancelation) = {
                     let (mut m, cancelation) = {
                         let mut c = 0;
@@ -213,8 +219,22 @@ impl BlockTask for HyprLand {
                     }
                     r = listener.start_listener_async() => r,
                 }
-            });
-        }
+            }
+        })
+        .zip(stream::iter(monitors.iter()))
+        .map(|(fut, mon)| async move { (mon, fut.await) })
+        .buffered(monitors.len().get())
+        .for_each(|(mon, result)| async move {
+            if let Err(e) = result {
+                log::error!("hyprland daemon for monitor {mon} failed: {e}")
+            }
+        });
+
+    let cancel = async { while events.recv().await.is_ok() {} };
+
+    tokio::select! {
+        _ = hypr => {}
+        _ = cancel => {}
     }
 }
 

@@ -1,4 +1,4 @@
-use std::num::NonZeroU8;
+use std::num::{NonZeroU8, NonZeroUsize};
 
 use crate::util::one_or_more::OneOrMore;
 
@@ -35,5 +35,12 @@ impl ActiveMonitors {
                 AffectedMonitor::Single(m)
             }
         })
+    }
+
+    pub fn len(&self) -> NonZeroUsize {
+        match self {
+            Self::All => NonZeroUsize::new(1).unwrap(),
+            Self::MonitorCount(n) => NonZeroUsize::from(*n),
+        }
     }
 }

@@ -8,7 +8,7 @@ use lemon::{
     parsing::parse,
 };
 use std::{env, fs, io, path::PathBuf};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -64,16 +64,12 @@ async fn main() -> io::Result<()> {
         .and_then(fs::read_to_string)
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Couldn't find config file"))?;
     let input = Box::leak(input.into_boxed_str());
-    let (bc_send, mut bc_recv) = broadcast::channel(100);
-    let (mpsc_send, mpsc_recv) = mpsc::channel(100);
     let blocks = match parse(
         input,
         args.outputs,
         args.tray,
         args.program,
         args.height_override,
-        &bc_send,
-        &mpsc_send,
     ) {
         Ok(bs) => bs,
         Err(e) => {
@@ -88,6 +84,7 @@ async fn main() -> io::Result<()> {
             log::trace!("{:?}", b);
         }
     }
+    let (bc_send, mut bc_recv) = broadcast::channel(100);
     if log::log_enabled!(log::Level::Debug) {
         tokio::task::spawn({
             async move {
@@ -101,10 +98,10 @@ async fn main() -> io::Result<()> {
     }
     match args.program {
         Program::Zelbar => {
-            event_loop::start_event_loop::<display::Zelbar<_>>(blocks, bc_send, mpsc_recv).await
+            event_loop::start_event_loop::<display::Zelbar<_>>(blocks, bc_send).await
         }
         Program::Lemonbar => {
-            event_loop::start_event_loop::<display::Lemonbar<_>>(blocks, bc_send, mpsc_recv).await
+            event_loop::start_event_loop::<display::Lemonbar<_>>(blocks, bc_send).await
         }
     }
     Ok(())

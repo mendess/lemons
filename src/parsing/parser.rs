@@ -1,4 +1,5 @@
 use super::{ParseError, Result};
+use core::fmt;
 use itertools::{Itertools, PeekingNext};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -54,6 +55,12 @@ fn skip_empty_lines<'a, I: PeekingNext<Item = &'a str>>(s: &mut I) {
 pub struct Title<'a> {
     pub level: u8,
     pub title: &'a str,
+}
+
+impl fmt::Display for Title<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.title)
+    }
 }
 
 #[derive(Debug)]

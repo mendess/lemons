@@ -4,15 +4,53 @@ pub mod color;
 pub mod global_config;
 pub mod monitor;
 
+use crate::event_loop::Event;
 pub use alignment::Alignment;
-use block::Block;
+use block::{Block, BlockUpdate};
 pub use color::Color;
 use core::fmt;
+use futures::{stream::FuturesUnordered, StreamExt};
 pub use monitor::ActiveMonitors;
-use std::ops::{Index, IndexMut};
+use std::{
+    future::Future,
+    ops::{Index, IndexMut},
+};
+use tokio::sync::{broadcast, mpsc};
 
 #[derive(Default)]
 pub struct Config<'a>(pub [Vec<Block<'a>>; 3]);
+
+impl Config<'static> {
+    pub fn start_blocks(
+        &self,
+        broadcast: &broadcast::Sender<Event>,
+        responses: mpsc::Sender<BlockUpdate>,
+    ) -> impl Future<Output = ()> + use<> {
+        let mut indexes = Indexes::default();
+        let futures = self
+            .0
+            .iter()
+            .flatten()
+            .map(|b| {
+                let task_as_str = format!("{:?}", b.task);
+                let bid = (b.alignment, indexes.get(b.alignment));
+                let broadcast = broadcast.subscribe();
+                let updates = responses.clone().into();
+                let cmd = b.cmd;
+
+                let fut = b.start(bid, broadcast, updates);
+
+                async move {
+                    log::info!("Starting task {task_as_str}({}) {bid:?}", cmd);
+                    fut.await;
+                    log::info!("Terminating task {task_as_str}({}) {bid:?}", cmd);
+                }
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        futures.collect::<()>()
+    }
+}
 
 impl<'a> Index<Alignment> for Config<'a> {
     type Output = Vec<Block<'a>>;

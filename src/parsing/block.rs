@@ -3,18 +3,16 @@ use super::{
     ParseError, Result,
 };
 use crate::{
-    event_loop::Event,
     global_config,
     model::{
         block::{self, *},
-        ActivationLayer, ActiveMonitors, Alignment, Indexes,
+        ActivationLayer, ActiveMonitors, Alignment,
     },
     util::signal::valid_rt_signum,
 };
 use std::{
     convert::TryInto, num::NonZeroU8, result::Result as StdResult, str::FromStr, time::Duration,
 };
-use tokio::sync::{broadcast, mpsc};
 
 impl FromStr for Alignment {
     type Err = &'static str;
@@ -60,16 +58,14 @@ impl Block<'static> {
     pub fn from_kvs(
         title: Title<'static>,
         n_monitors: NonZeroU8,
-        indexes: &mut Indexes,
+        // indexes: &mut Indexes,
         iter: KeyValues<'static, '_>,
-        broadcast: &broadcast::Sender<Event>,
-        responses: &mpsc::Sender<BlockUpdate>,
     ) -> Result<'static, Self> {
         let mut decorations_b = TextDecorations::default();
         let mut block_b = BlockBuilder::default();
         let mut actions: Actions<'static> = Default::default();
-        let mut signal = Signal::None;
         // mandatory parameters
+        let mut alignment = None;
         let mut cmd = None;
         let mut interval = None;
         let gc = global_config::get();
@@ -142,25 +138,27 @@ impl Block<'static> {
                     cmd = Some((value, BlockType::Native));
                 }
                 "alignment" | "align" => {
-                    block_b.alignment(
+                    alignment = Some(
                         value
                             .parse()
                             .map_err(|_| ParseError::InvalidAlignment(value))?,
                     );
                 }
                 "signal" => {
-                    signal = value
-                        .parse::<bool>()
-                        .ok()
-                        .map(|_| Signal::Any)
-                        .or_else(|| {
-                            value
-                                .parse()
-                                .ok()
-                                .filter(|s| valid_rt_signum(*s))
-                                .map(Signal::Num)
-                        })
-                        .ok_or(ParseError::InvalidSignal(value))?;
+                    block_b.signal(
+                        value
+                            .parse::<bool>()
+                            .ok()
+                            .map(|_| Signal::Any)
+                            .or_else(|| {
+                                value
+                                    .parse()
+                                    .ok()
+                                    .filter(|s| valid_rt_signum(*s))
+                                    .map(Signal::Num)
+                            })
+                            .ok_or(ParseError::InvalidSignal(value))?,
+                    );
                 }
                 "raw" => {
                     block_b.raw(
@@ -189,22 +187,15 @@ impl Block<'static> {
                 }
             };
         }
-        if let Some((value, kind)) = cmd {
+        if let Some(((value, kind), alignment)) = (|| Some((cmd?, alignment?)))() {
             block_b.decorations(decorations_b);
-            let mut block = block_b
-                .build()
-                .map_err(|e| ParseError::MalformedBlock(e.to_string()))?;
-            // monitors.resize_one_or_more(&mut block.last_run);
-            block
-                .available_actions
-                .set_all(actions.iter().map(Option::is_some));
 
             let task: Box<dyn BlockTask> = match kind {
                 BlockType::Static => Box::new(block::constant::Static),
                 BlockType::Cmd if interval.is_some() => {
                     Box::new(block::timed::Timed(interval.unwrap()))
                 }
-                BlockType::Cmd if signal != Signal::None => {
+                BlockType::Cmd if block_b.has_signal() => {
                     Box::new(block::timed::Timed(Duration::from_secs(u64::MAX)))
                 }
                 BlockType::Cmd => {
@@ -224,22 +215,7 @@ impl Block<'static> {
                     }
                 }
             };
-            let bid = (block.alignment, indexes.get(block.alignment));
-            log::info!("Starting task {:?}({}) {:?}", task, value, bid);
-            task.start(
-                broadcast,
-                TaskData {
-                    block_name: title.title,
-                    cmd: value,
-                    updates: responses.into(),
-                    actions,
-                    bid,
-                    activation_layer: block.layer,
-                    monitors: block.active_in,
-                    signal,
-                },
-            );
-            Ok(block)
+            Ok(block_b.build(title, value, alignment, actions, task))
         } else {
             Err(ParseError::MalformedBlock(
                 "Missing content (cmd, persistent, native, static)".into(),

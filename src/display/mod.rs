@@ -7,7 +7,7 @@ use std::{fmt, str::FromStr};
 use crate::{
     event_loop::action_task::Action,
     model::{
-        block::{Block, BlockText, Font, Offset},
+        block::{AvailableActions, Block, BlockText, Font, Offset},
         Alignment, Color,
     },
 };
@@ -116,7 +116,7 @@ pub fn display_block<W: fmt::Write, B: Bar<W>>(
         if let Some(x) = &block.font {
             builder.font(x)?;
         }
-        for button in block.available_actions.iter() {
+        for button in AvailableActions::from(block.available_actions.map(|o| o.is_some())).iter() {
             builder.add_action(Action::new(block.alignment, index, monitor, button))?;
         }
         builder.text(&text.text, block.raw)?;

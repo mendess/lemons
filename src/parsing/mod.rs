@@ -6,17 +6,9 @@ pub mod parser;
 use std::num::NonZeroU8;
 
 use crate::{
-    display::Program,
-    event_loop::Event,
-    global_config::GlobalConfig,
-    model::ActivationLayer,
-    model::{
-        block::{Block, BlockUpdate},
-        Indexes,
-    },
+    display::Program, global_config::GlobalConfig, model::block::Block, model::ActivationLayer,
     Config,
 };
-use tokio::sync::{broadcast, mpsc};
 
 #[derive(Debug)]
 pub enum ParseError<'a> {
@@ -48,8 +40,6 @@ pub fn parse(
     tray: bool,
     program: Program,
     height_override: Option<u32>,
-    broadcast: &broadcast::Sender<Event>,
-    responses: &mpsc::Sender<BlockUpdate>,
 ) -> Result<'static, Config<'static>> {
     let mut parser = parser::Parser::new(config);
     let mut global_config = parser
@@ -60,7 +50,6 @@ pub fn parse(
     global_config.program = program;
 
     let mut blocks = Config::default();
-    let mut indexes = Indexes::default();
     crate::global_config::set(global_config.clone());
     let bar_spec_count = outputs
         .len()
@@ -75,10 +64,10 @@ pub fn parse(
         let block = Block::from_kvs(
             title,
             bar_spec_count,
-            &mut indexes,
+            // &mut indexes,
             kvs,
-            broadcast,
-            responses,
+            // broadcast,
+            // responses,
         )?;
         if let ActivationLayer::L(l) = block.layer {
             global_config.n_layers = u16::max(global_config.n_layers, l);

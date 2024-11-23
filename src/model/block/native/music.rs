@@ -6,50 +6,63 @@ use crate::{
         AffectedMonitor, Color,
     },
 };
-use futures::stream::StreamExt;
+use futures::{future::BoxFuture, stream::StreamExt, FutureExt};
 use mlib::players::{
     self,
     event::{OwnedLibMpvEvent, PlayerEvent},
 };
-use std::sync::Arc;
-use tokio::sync::{broadcast, watch};
+use std::{pin::pin, sync::Arc};
+use tokio::{
+    select,
+    sync::{broadcast, watch},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Music;
 
+#[async_trait::async_trait]
 impl BlockTask for Music {
-    fn start(&self, events: &broadcast::Sender<Event>, TaskData { updates, bid, .. }: TaskData) {
-        let events = events.subscribe();
-        tokio::spawn(async move {
+    fn start(&self, events: broadcast::Receiver<Event>, td: TaskData) -> BoxFuture<'static, ()> {
+        start(events, td).boxed()
+    }
+}
+
+async fn start(events: broadcast::Receiver<Event>, TaskData { updates, bid, .. }: TaskData) {
+    players::wait_for_music_daemon_to_start().await;
+    let (bar_data, _) = watch::channel(BarData::fetch().await.unwrap());
+    let mut receiver = bar_data.subscribe();
+    bar_data.send_modify(|_| {});
+    let mut bar_data = Arc::new(bar_data);
+    let user_event_loop = pin!(user_event_loop(events, bid, bar_data.clone()));
+    let player_event_loop = pin!(async move {
+        loop {
+            bar_data = player_event_loop(bar_data).await;
+            bar_data.send_if_modified(|data| data.take().is_some());
             players::wait_for_music_daemon_to_start().await;
-            let (bar_data, _) = watch::channel(BarData::fetch().await.unwrap());
-            let mut receiver = bar_data.subscribe();
-            bar_data.send_modify(|_| {});
-            let mut bar_data = Arc::new(bar_data);
-            tokio::spawn(user_event_loop(events, bid, bar_data.clone()));
-            tokio::spawn(async move {
-                loop {
-                    bar_data = player_event_loop(bar_data).await;
-                    bar_data.send_if_modified(|data| data.take().is_some());
-                    players::wait_for_music_daemon_to_start().await;
-                }
-            });
-            while receiver.changed().await.is_ok() {
-                let data = receiver
-                    .borrow_and_update()
-                    .as_ref()
-                    .map(BarData::to_decorated_text)
-                    .unwrap_or_default();
-                if updates
-                    .send((data, bid, AffectedMonitor::All))
-                    .await
-                    .is_err()
-                {
-                    log::warn!("native music block shutting down");
-                    break;
-                }
+        }
+    });
+    let bar_event_loop = pin!(async {
+        while receiver.changed().await.is_ok() {
+            let data = receiver
+                .borrow_and_update()
+                .as_ref()
+                .map(BarData::to_decorated_text)
+                .unwrap_or_default();
+            if updates
+                .send((data, bid, AffectedMonitor::All))
+                .await
+                .is_err()
+            {
+                log::warn!("native music block shutting down");
+                break;
             }
-        });
+        }
+    });
+
+    select! {
+        _ = user_event_loop => {}
+        _ = player_event_loop => {}
+        _ = bar_event_loop => {}
     }
 }
 

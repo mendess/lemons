@@ -1,30 +1,29 @@
 pub mod action_task;
 pub mod signal_task;
-pub mod update_channel;
+pub mod update_task;
 
 use crate::{
-    display::{display_block, Bar},
-    global_config,
+    display::Bar,
     model::{
-        block::{self, Block, BlockId, BlockText, BlockUpdate},
+        block::{self, Block, BlockId, BlockText},
         ActivationLayer, AffectedMonitor, Alignment, Config,
     },
     util::{cmd::child_debug_loop, one_or_more::OneOrMore},
 };
-use enum_iterator::IntoEnumIterator;
+use futures::{stream, StreamExt as _};
 use std::{
     ffi::OsStr,
     ops::{Index, IndexMut},
     process::Stdio,
-    sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Once,
-    },
+    sync::atomic::{AtomicU16, Ordering},
+    time::Duration,
 };
 use tokio::{
-    io::AsyncWriteExt,
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::{broadcast, mpsc, Mutex},
+    select,
+    sync::{broadcast, mpsc},
+    task::JoinHandle,
+    time::timeout,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -175,11 +174,8 @@ impl RunningConfig {
     }
 }
 
-pub async fn start_event_loop<B>(
-    config: Config<'static>,
-    events: broadcast::Sender<Event>,
-    mut updates: mpsc::Receiver<BlockUpdate>,
-) where
+pub async fn start_event_loop<B>(config: Config<'static>, events: broadcast::Sender<Event>)
+where
     B: Bar<String>,
 {
     let global_config = crate::global_config::get();
@@ -197,72 +193,44 @@ pub async fn start_event_loop<B>(
             .map(|(i, args)| spawn_bar::<_, _, _, B>(args, i as u8))
             .unzip_n()
     };
-    let events = Arc::new(Mutex::new(events));
-    action_task::run(lemon_outputs, events.clone());
-    signal_task::refresh(events.clone());
-    signal_task::layer(events.clone());
-
-    let mut config = RunningConfig::from(config);
-    let mut line = String::new();
-    while let Some(update) = updates.recv().await {
-        let (_, _, monitor) = update.id();
-        if !config.update(update) {
-            // TODO: we could save an update, but zelbar is bugged and so redundant updates
-            // actually fix it
-            // continue;
-        }
-        match monitor {
-            AffectedMonitor::Single(m) => match lemon_inputs.get_mut(usize::from(m)) {
-                Some(input) => {
-                    line = build_line::<B>(&config, m, line);
-                    log::trace!("{m} => {line}");
-                    if let Err(e) = input.write_all(line.as_bytes()).await {
-                        log::error!("Couldn't talk to lemon bar :( {:?}", e);
-                    }
-                }
-                None => log::error!("monitor: {m} is out of bounds"),
-            },
-            AffectedMonitor::All => {
-                for (monitor, input) in lemon_inputs.iter_mut().enumerate() {
-                    line = build_line::<B>(&config, monitor as _, line);
-                    log::trace!("{monitor} => {line}");
-                    if let Err(e) = input.write_all(line.as_bytes()).await {
-                        log::error!("Couldn't talk to lemon bar :( {:?}", e);
-                    }
-                }
-            }
-        }
-        if bars.iter_mut().all(|c| matches!(c.try_wait(), Ok(Some(_)))) {
-            break;
+    let (updates_tx, updates_rx) = mpsc::channel(100);
+    let blocks_task = tokio::spawn(config.start_blocks(&events, updates_tx));
+    {
+        select! {
+            _ = update_task::update::<B>(config, updates_rx, &mut lemon_inputs) => {}
+            _ = action_task::run(lemon_outputs, events.clone()) => {}
+            _ = signal_task::refresh(events.clone()) => {}
+            _ = signal_task::layer(events.clone()) => {}
+            _ = stream::iter(&mut bars).for_each(|b| async { let _ = b.wait().await; }) => {}
+            _ = signal_task::graceful_shutdown() => {}
         }
     }
+    cleanup(events, bars, blocks_task).await;
 }
 
-fn build_line<B>(config: &RunningConfig, monitor: u8, mut line: String) -> String
-where
-    B: Bar<String>,
-{
-    line.clear();
-    let global_config = global_config::get();
-    let current_layer = current_layer();
-    let mut bar = B::new(line, global_config.separator);
-    Alignment::into_enum_iter()
-        .map(|a| (a, &config[a]))
-        .filter(|(_, c)| !c.is_empty())
-        .for_each(|(al, blocks)| {
-            let set_alignment = Once::new();
-            blocks
-                .iter()
-                .enumerate()
-                .filter(|(_, b)| !b.last_run[monitor].is_empty())
-                .filter(|(_, b)| b.block.layer == current_layer)
-                .for_each(|(index, b)| {
-                    set_alignment.call_once(|| bar.set_alignment(al).unwrap());
-                    display_block(&mut bar, &b.block, &b.last_run[monitor], index, monitor).unwrap()
-                });
-        });
-    // TODO: line.lemon('O', tray_offset).unwrap();
-    let mut line = bar.into_inner();
-    line.push('\n');
-    line
+pub async fn cleanup(
+    events: broadcast::Sender<Event>,
+    bars: Vec<Child>,
+    blocks_task: JoinHandle<()>,
+) {
+    drop(events); // signal to all blocks that they should shutdown.
+    for (i, mut c) in bars.into_iter().enumerate() {
+        let r = timeout(Duration::from_secs(5), async {
+            c.kill().await?;
+            c.wait().await
+        })
+        .await;
+        match r {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                log::error!("failed to stop bar {i}: {e}");
+            }
+            Err(_elapsed) => {
+                log::error!("timedout while stopping bar {i}");
+            }
+        }
+    }
+    if let Err(e) = timeout(Duration::from_secs(6), blocks_task).await {
+        log::error!("blocks task panicked: {e}");
+    }
 }

@@ -5,8 +5,12 @@ pub mod signal_task;
 pub mod timed;
 
 use super::{ActivationLayer, ActiveMonitors, AffectedMonitor, Alignment, Color};
-use crate::event_loop::{update_channel::UpdateChannel, Event, MouseButton};
+use crate::{
+    event_loop::{update_task::UpdateChannel, Event, MouseButton},
+    parsing::parser::Title,
+};
 use derive_builder::Builder;
+use futures::future::BoxFuture;
 use std::{
     convert::TryFrom,
     ops::{Index, IndexMut},
@@ -82,8 +86,9 @@ impl BlockUpdate {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Default, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Signal {
+    #[default]
     None,
     Any,
     Num(c_int),
@@ -96,7 +101,7 @@ impl Signal {
 }
 
 pub struct TaskData {
-    pub block_name: &'static str,
+    pub block_name: Title<'static>,
     pub cmd: &'static str,
     pub updates: UpdateChannel,
     pub actions: Actions<'static>,
@@ -107,7 +112,7 @@ pub struct TaskData {
 }
 
 pub trait BlockTask: std::fmt::Debug {
-    fn start(&self, events: &broadcast::Sender<Event>, data: TaskData);
+    fn start(&self, events: broadcast::Receiver<Event>, data: TaskData) -> BoxFuture<'static, ()>;
 }
 
 pub type Actions<'s> = [Option<&'s str>; 5];
@@ -167,7 +172,7 @@ impl TextDecorations {
 }
 
 #[derive(Builder, Debug)]
-#[builder(setter(strip_option))]
+#[builder(setter(strip_option), build_fn(skip, name = "build"))]
 pub struct Block<'a> {
     #[builder(default)]
     pub decorations: TextDecorations,
@@ -179,15 +184,74 @@ pub struct Block<'a> {
     pub raw: bool,
     #[builder(default)]
     pub layer: ActivationLayer,
-
-    pub alignment: Alignment,
-
     #[builder(default)]
     pub active_in: ActiveMonitors,
-    // #[builder(setter(skip))]
-    // pub last_run: OneOrMore<String>,
+    #[builder(default)]
+    pub signal: Signal,
+
+    // mandatory
+    #[builder(setter(skip), default)] // custom setter is just not providing one
+    title: Title<'a>,
     #[builder(setter(skip), default)]
-    pub available_actions: AvailableActions,
+    pub alignment: Alignment,
+    #[builder(setter(skip), default)]
+    pub available_actions: [Option<&'a str>; 5],
+    #[builder(setter(skip), default)]
+    pub cmd: &'a str,
+    #[builder(setter(skip), default)]
+    pub task: Box<dyn BlockTask>,
+}
+
+impl Block<'static> {
+    pub fn start(
+        &self,
+        block_id: BlockId,
+        broadcast: broadcast::Receiver<Event>,
+        updates: UpdateChannel,
+    ) -> BoxFuture<'static, ()> {
+        self.task.start(
+            broadcast,
+            TaskData {
+                block_name: self.title,
+                cmd: self.cmd,
+                updates,
+                actions: self.available_actions,
+                bid: block_id,
+                activation_layer: self.layer,
+                monitors: self.active_in,
+                signal: self.signal,
+            },
+        )
+    }
+}
+impl<'a> BlockBuilder<'a> {
+    pub fn has_signal(&self) -> bool {
+        self.signal.is_some()
+    }
+
+    pub fn build(
+        self,
+        title: Title<'a>,
+        cmd: &'a str,
+        alignment: Alignment,
+        available_actions: [Option<&'a str>; 5],
+        task: Box<dyn BlockTask>,
+    ) -> Block<'a> {
+        Block {
+            title,
+            cmd,
+            decorations: self.decorations.unwrap_or_default(),
+            font: self.font.unwrap_or_default(),
+            offset: self.offset.unwrap_or_default(),
+            raw: self.raw.unwrap_or_default(),
+            layer: self.layer.unwrap_or_default(),
+            alignment,
+            active_in: self.active_in.unwrap_or_default(),
+            available_actions,
+            task,
+            signal: self.signal.unwrap_or(Signal::None),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -212,5 +276,13 @@ impl AvailableActions {
             .filter(move |i| self.0 & (1 << i) != 0)
             .map(|i| i + 1)
             .map(Into::into)
+    }
+}
+
+impl From<[bool; 5]> for AvailableActions {
+    fn from(value: [bool; 5]) -> Self {
+        let mut s = Self::default();
+        s.set_all(value.into_iter());
+        s
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.3.13"
+version = "4.3.14"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2021"
 default-run = "lemon"
@@ -8,6 +8,7 @@ default-run = "lemon"
 [dependencies]
 arc-swap = "1.5.1"
 array-init = "2"
+async-trait = "0.1"
 chrono = "0.4"
 clap = { version = "4.4.6", features = ["derive"] }
 derive_builder = "0.10"
