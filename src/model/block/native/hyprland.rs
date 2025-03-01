@@ -53,12 +53,9 @@ async fn start(
             async move {
                 let (state, cancelation) = {
                     let (mut m, cancelation) = {
-                        let mut c = 0;
                         loop {
-                            c += 1;
                             match Monitor::new(updates, bid, mon.into()).await {
                                 Ok(m) => break m,
-                                Err((_, e)) if c >= 3 => return Err(e),
                                 Err((ch, e)) => {
                                     updates = ch;
                                     let error_update =
