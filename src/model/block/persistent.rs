@@ -10,9 +10,9 @@ use crate::{
     },
 };
 use futures::{
+    FutureExt,
     future::BoxFuture,
     stream::{self, Stream, StreamExt},
-    FutureExt,
 };
 use std::{process::Stdio, time::Duration};
 use tokio::{
@@ -69,8 +69,7 @@ async fn start(events: broadcast::Receiver<Event>, data: TaskData) {
                         }
                         e = events.recv() => {
                             let Ok(e) = e else {
-                                output.reap().await;
-                                return;
+                                break;
                             };
                             match e {
                                 Event::MouseClicked(id, mon, button) if id == bid => {
@@ -85,6 +84,7 @@ async fn start(events: broadcast::Receiver<Event>, data: TaskData) {
                         }
                     }
                 }
+                output.reap().await;
             }
         }).await;
 }
