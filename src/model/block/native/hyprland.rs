@@ -351,7 +351,7 @@ impl Monitor {
 
     async fn find_ws_by_name_or_create(&mut self, name: &str) -> hyprland::Result<Option<&mut Ws>> {
         match self.ws.iter().position(|ws| ws.name == name) {
-            Some(idx) => return Ok(self.ws.get_mut(idx)),
+            Some(idx) => Ok(self.ws.get_mut(idx)),
             None => {
                 let Some(new_ws) = Workspaces::get_async()
                     .await?
@@ -454,7 +454,10 @@ impl Monitor {
     }
 }
 
-fn handler<D, F, Fut>(state: &Arc<Mutex<Monitor>>, f: F) -> impl Fn(D) -> VoidFuture
+fn handler<D, F, Fut>(
+    state: &Arc<Mutex<Monitor>>,
+    f: F,
+) -> impl Fn(D) -> VoidFuture + use<D, F, Fut>
 where
     F: Fn(Arc<Mutex<Monitor>>, D) -> Fut + Send,
     D: Send + 'static,

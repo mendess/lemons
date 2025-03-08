@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt};
 
 use crate::model::Color;
 
-use super::{implementations::DisplayColor, CmdlineArgBuilder, DisplayBlock};
+use super::{CmdlineArgBuilder, DisplayBlock, implementations::DisplayColor};
 
 pub struct Lemonbar<W> {
     sink: W,
@@ -88,8 +88,10 @@ impl CmdlineArgBuilder for LemonArgs {
 }
 
 impl<W: fmt::Write> super::Bar<W> for Lemonbar<W> {
-    type BarBlockBuilder<'bar> = LemonDisplayBlock<'bar, W>
-        where Self: 'bar;
+    type BarBlockBuilder<'bar>
+        = LemonDisplayBlock<'bar, W>
+    where
+        Self: 'bar;
 
     type CmdlineArgBuilder = LemonArgs;
 
@@ -152,7 +154,7 @@ impl<'bar, W> LemonDisplayBlock<'bar, W> {
     }
 }
 
-impl<'bar, W> LemonDisplayBlock<'bar, W>
+impl<W> LemonDisplayBlock<'_, W>
 where
     W: fmt::Write,
 {
@@ -165,7 +167,7 @@ where
     }
 }
 
-impl<'bar, W> DisplayBlock for LemonDisplayBlock<'bar, W>
+impl<W> DisplayBlock for LemonDisplayBlock<'_, W>
 where
     W: fmt::Write,
 {

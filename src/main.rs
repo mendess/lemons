@@ -86,11 +86,9 @@ async fn main() -> io::Result<()> {
     }
     let (bc_send, mut bc_recv) = broadcast::channel(100);
     if log::log_enabled!(log::Level::Debug) {
-        tokio::task::spawn({
-            async move {
-                while let Ok(ev) = bc_recv.recv().await {
-                    log::debug!("[{:?}] event {:?} broadcasted", chrono::Utc::now(), ev)
-                }
+        tokio::task::spawn(async move {
+            while let Ok(ev) = bc_recv.recv().await {
+                log::debug!("[{:?}] event {:?} broadcasted", chrono::Utc::now(), ev)
             }
         });
     } else {

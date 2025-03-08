@@ -60,7 +60,7 @@ impl<'a> Index<Alignment> for Config<'a> {
     }
 }
 
-impl<'a> IndexMut<Alignment> for Config<'a> {
+impl IndexMut<Alignment> for Config<'_> {
     fn index_mut(&mut self, a: Alignment) -> &mut Self::Output {
         &mut self.0[a as usize]
     }

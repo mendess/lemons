@@ -23,7 +23,7 @@ impl ActiveMonitors {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = AffectedMonitor> {
+    pub fn iter(&self) -> impl Iterator<Item = AffectedMonitor> + use<> {
         let u8_range = match self {
             Self::All => u8::MAX..=u8::MAX,
             Self::MonitorCount(m) => 0..=(m.get() - 1),

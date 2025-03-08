@@ -68,7 +68,7 @@ pub struct KeyValues<'a, 'parser> {
     parser: Option<&'parser mut Parser<'a>>,
 }
 
-impl<'a, 'parser> Iterator for KeyValues<'a, 'parser> {
+impl<'a> Iterator for KeyValues<'a, '_> {
     type Item = Result<'a, (&'a str, &'a str, u8)>;
     fn next(&mut self) -> Option<Self::Item> {
         self.parser
@@ -82,7 +82,7 @@ impl<'a, 'parser> Iterator for KeyValues<'a, 'parser> {
                     let level = (m.end() / 2) + 1;
                     Ok((k, v, level as u8))
                 } else {
-                    return Err(ParseError::ExpectedAttribute(attr));
+                    Err(ParseError::ExpectedAttribute(attr))
                 }
             })
     }

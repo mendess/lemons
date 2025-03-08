@@ -2,7 +2,7 @@
 name = "lemon"
 version = "4.3.15"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
-edition = "2021"
+edition = "2024"
 default-run = "lemon"
 
 [dependencies]

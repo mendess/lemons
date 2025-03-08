@@ -9,7 +9,7 @@ use regex::{Captures, Regex};
 
 use crate::model::{Alignment, Color};
 
-use super::{implementations::DisplayColor, CmdlineArgBuilder, DisplayBlock};
+use super::{CmdlineArgBuilder, DisplayBlock, implementations::DisplayColor};
 
 pub struct Zelbar<W> {
     sink: W,
@@ -75,8 +75,10 @@ impl CmdlineArgBuilder for ZelbarArgs {
 }
 
 impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
-    type BarBlockBuilder<'bar> = ZelbarDisplayBlock<'bar, W>
-        where Self: 'bar;
+    type BarBlockBuilder<'bar>
+        = ZelbarDisplayBlock<'bar, W>
+    where
+        Self: 'bar;
 
     type CmdlineArgBuilder = ZelbarArgs;
 
@@ -129,7 +131,7 @@ impl<'bar, W> ZelbarDisplayBlock<'bar, W> {
     }
 }
 
-impl<'bar, W> ZelbarDisplayBlock<'bar, W>
+impl<W> ZelbarDisplayBlock<'_, W>
 where
     W: fmt::Write,
 {
@@ -142,7 +144,7 @@ where
     }
 }
 
-impl<'bar, W> DisplayBlock for ZelbarDisplayBlock<'bar, W>
+impl<W> DisplayBlock for ZelbarDisplayBlock<'_, W>
 where
     W: fmt::Write,
 {

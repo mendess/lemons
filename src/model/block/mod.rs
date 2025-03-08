@@ -125,7 +125,7 @@ impl<'s> Index<MouseButton> for Actions<'s> {
     }
 }
 
-impl<'s> IndexMut<MouseButton> for Actions<'s> {
+impl IndexMut<MouseButton> for Actions<'_> {
     fn index_mut(&mut self, index: MouseButton) -> &mut Self::Output {
         &mut self[index as usize - 1]
     }

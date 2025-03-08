@@ -1,6 +1,6 @@
 use std::os::raw::c_int;
 
-extern "C" {
+unsafe extern "C" {
     fn __libc_current_sigrtmin() -> c_int;
     fn __libc_current_sigrtmax() -> c_int;
 }
