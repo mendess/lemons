@@ -24,7 +24,7 @@ pub fn get() -> Arc<GlobalConfig<'static>> {
     GLOBAL_CONFIG.load_full()
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct GlobalConfig<'a> {
     pub height: Option<u32>,
     pub outputs: Vec<String>,

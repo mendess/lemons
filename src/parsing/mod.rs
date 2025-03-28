@@ -78,6 +78,7 @@ pub fn parse(
     global_config.tray = tray;
     global_config.outputs = outputs;
     global_config.height = height_override.or(global_config.height);
+    log::debug!("global config loaded: {global_config:?}");
     crate::global_config::set(global_config);
     Ok(blocks)
 }
