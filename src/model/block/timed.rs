@@ -7,10 +7,10 @@ use crate::{
     parsing::parser::Title,
     util::{cmd::run_cmd, result_ext::ResultExt, signal::sig_rt_min, trim_new_lines},
 };
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use std::time::Duration;
 use tokio::{
-    signal::unix::{signal as signal_stream, SignalKind},
+    signal::unix::{SignalKind, signal as signal_stream},
     sync::broadcast,
     time,
 };

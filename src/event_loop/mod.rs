@@ -5,12 +5,12 @@ pub mod update_task;
 use crate::{
     display::Bar,
     model::{
-        block::{self, Block, BlockId, BlockText},
         ActivationLayer, AffectedMonitor, Alignment, Config,
+        block::{self, Block, BlockId, BlockText},
     },
     util::{cmd::child_debug_loop, one_or_more::OneOrMore},
 };
-use futures::{stream, StreamExt as _};
+use futures::{StreamExt as _, stream};
 use std::{
     ffi::OsStr,
     ops::{Index, IndexMut},

@@ -1,12 +1,12 @@
 use super::{
-    parser::{KeyValues, Title},
     ParseError, Result,
+    parser::{KeyValues, Title},
 };
 use crate::{
     global_config,
     model::{
-        block::{self, *},
         ActivationLayer, ActiveMonitors, Alignment,
+        block::{self, *},
     },
     util::signal::valid_rt_signum,
 };
@@ -201,7 +201,7 @@ impl Block<'static> {
                 BlockType::Cmd => {
                     return Err(ParseError::MalformedBlock(
                         "Missing either signal or interval".into(),
-                    ))
+                    ));
                 }
                 BlockType::Persistent => Box::new(block::persistent::Persistent),
                 BlockType::Native => {

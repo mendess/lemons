@@ -1,16 +1,16 @@
 use std::time::Duration;
 
-use chrono::{offset::Local, Timelike};
+use chrono::{Timelike, offset::Local};
 use tokio::{sync::broadcast::Receiver, time::timeout};
 
 use crate::{
-    event_loop::{current_layer, Event},
+    event_loop::{Event, current_layer},
     model::{
-        block::{BlockTask, TaskData},
         AffectedMonitor,
+        block::{BlockTask, TaskData},
     },
 };
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Clock;

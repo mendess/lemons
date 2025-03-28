@@ -1,9 +1,9 @@
-use super::{current_layer, Event, MouseButton};
+use super::{Event, MouseButton, current_layer};
 use crate::{
-    model::{block::BlockId, Alignment},
+    model::{Alignment, block::BlockId},
     util::cmd,
 };
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use std::{
     fmt::{self, Display},
     str::FromStr,

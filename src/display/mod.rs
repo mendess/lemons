@@ -7,8 +7,8 @@ use std::{fmt, str::FromStr};
 use crate::{
     event_loop::action_task::Action,
     model::{
-        block::{AvailableActions, Block, BlockText, Font, Offset},
         Alignment, Color,
+        block::{AvailableActions, Block, BlockText, Font, Offset},
     },
 };
 pub use lemonbar::Lemonbar;

@@ -1,7 +1,7 @@
 use core::fmt;
 use std::sync::Arc;
 
-use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryFutureExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture, stream};
 use hyprland::{
     data::{Clients, Workspaces},
     event_listener::{
@@ -10,14 +10,14 @@ use hyprland::{
     },
     shared::{Address, HyprData, HyprDataActive, WorkspaceId, WorkspaceType},
 };
-use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::sync::{Mutex, broadcast, oneshot};
 
 use crate::{
-    event_loop::{update_task::UpdateChannel, Event},
+    event_loop::{Event, update_task::UpdateChannel},
     global_config,
     model::{
-        block::{BlockId, BlockTask, TaskData, TextDecorations},
         Color,
+        block::{BlockId, BlockTask, TaskData, TextDecorations},
     },
 };
 

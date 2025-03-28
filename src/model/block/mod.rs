@@ -6,7 +6,7 @@ pub mod timed;
 
 use super::{ActivationLayer, ActiveMonitors, AffectedMonitor, Alignment, Color};
 use crate::{
-    event_loop::{update_task::UpdateChannel, Event, MouseButton},
+    event_loop::{Event, MouseButton, update_task::UpdateChannel},
     parsing::parser::Title,
 };
 use derive_builder::Builder;

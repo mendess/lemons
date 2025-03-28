@@ -1,7 +1,7 @@
 use std::{env::args, time::Duration};
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{unix::SocketAddr, UnixListener, UnixStream},
+    net::{UnixListener, UnixStream, unix::SocketAddr},
     time,
 };
 

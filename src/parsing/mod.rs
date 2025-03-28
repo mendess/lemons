@@ -6,8 +6,8 @@ pub mod parser;
 use std::num::NonZeroU8;
 
 use crate::{
-    display::Program, global_config::GlobalConfig, model::block::Block, model::ActivationLayer,
-    Config,
+    Config, display::Program, global_config::GlobalConfig, model::ActivationLayer,
+    model::block::Block,
 };
 
 #[derive(Debug)]

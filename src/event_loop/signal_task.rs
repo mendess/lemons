@@ -1,9 +1,9 @@
-use super::{Event, CURRENT_LAYER};
+use super::{CURRENT_LAYER, Event};
 use crate::global_config;
 use std::{future::pending, sync::atomic::Ordering};
 use tokio::{
     select,
-    signal::unix::{signal, SignalKind},
+    signal::unix::{SignalKind, signal},
     sync::broadcast::Sender,
 };
 

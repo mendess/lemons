@@ -1,6 +1,6 @@
 use crate::util::signal::sig_rt_min;
 use std::{future::Future, io, os::raw::c_int};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 
 pub async fn run<F, Fut, T>(n: c_int, data: T, mut cont: F) -> io::Result<()>
 where

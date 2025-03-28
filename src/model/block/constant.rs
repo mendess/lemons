@@ -1,6 +1,6 @@
 use super::{Event, TaskData};
 use crate::{event_loop::current_layer, util::cmd::run_cmd};
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone, Copy)]

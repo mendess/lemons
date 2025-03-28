@@ -1,16 +1,16 @@
-use super::{current_layer, RunningConfig};
+use super::{RunningConfig, current_layer};
 use crate::{
-    display::{display_block, Bar},
-    global_config,
-    model::{block::BlockUpdate, AffectedMonitor, Alignment},
     Config,
+    display::{Bar, display_block},
+    global_config,
+    model::{AffectedMonitor, Alignment, block::BlockUpdate},
 };
 use enum_iterator::IntoEnumIterator;
 use std::sync::Once;
 use tokio::{
     io::AsyncWriteExt as _,
     process::ChildStdin,
-    sync::mpsc::{self, error::SendError, Sender},
+    sync::mpsc::{self, Sender, error::SendError},
 };
 
 #[derive(Clone)]

@@ -1,12 +1,12 @@
 use super::super::{BlockId, BlockTask, TaskData};
 use crate::{
-    event_loop::{current_layer, Event, MouseButton},
+    event_loop::{Event, MouseButton, current_layer},
     model::{
-        block::{BlockText, TextDecorations},
         AffectedMonitor, Color,
+        block::{BlockText, TextDecorations},
     },
 };
-use futures::{future::BoxFuture, stream::StreamExt, FutureExt};
+use futures::{FutureExt, future::BoxFuture, stream::StreamExt};
 use mlib::players::{
     self,
     event::{OwnedLibMpvEvent, PlayerEvent},

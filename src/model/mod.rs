@@ -9,7 +9,7 @@ pub use alignment::Alignment;
 use block::{Block, BlockUpdate};
 pub use color::Color;
 use core::fmt;
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, stream::FuturesUnordered};
 pub use monitor::ActiveMonitors;
 use std::{
     future::Future,

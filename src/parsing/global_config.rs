@@ -1,4 +1,4 @@
-use super::{parser::KeyValues, ParseError, Result};
+use super::{ParseError, Result, parser::KeyValues};
 use crate::global_config::GlobalConfig;
 use std::convert::TryInto;
 

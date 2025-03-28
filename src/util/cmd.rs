@@ -7,7 +7,7 @@ use tokio::{
     io::{self, AsyncBufReadExt as _, BufReader},
     process::{ChildStderr, Command},
 };
-use tokio_stream::{wrappers::LinesStream, StreamExt};
+use tokio_stream::{StreamExt, wrappers::LinesStream};
 
 pub async fn run_cmd(
     source_block_name: &'static str,
