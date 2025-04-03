@@ -1,10 +1,10 @@
 use super::{ParseError, Result, parser::KeyValues};
-use crate::global_config::GlobalConfig;
+use crate::global_config::FileConfig;
 use std::convert::TryInto;
 
-impl<'a> GlobalConfig<'a> {
-    pub fn from_kvs(iter: KeyValues<'a, '_>) -> Result<'a, Self> {
-        let mut global_config = GlobalConfig::default();
+impl FileConfig {
+    pub fn from_kvs<'a>(iter: KeyValues<'a, '_>) -> Result<'a, Self> {
+        let mut global_config = Self::default();
         let mut in_colors = false;
         for kvl in iter {
             let (key, value, level) = kvl?;
@@ -24,7 +24,7 @@ impl<'a> GlobalConfig<'a> {
                 "background" | "bg" | "B" => global_config.background = Some(color()?),
                 "foreground" | "fg" | "F" => global_config.foreground = Some(color()?),
                 "underline" | "un" | "U" => global_config.underline = Some(color()?),
-                "font" | "f" => global_config.fonts.push(value),
+                "font" | "f" => global_config.fonts.push(value.to_owned()),
                 "bottom" | "b" => {
                     global_config.bottom = value
                         .trim()
@@ -39,7 +39,7 @@ impl<'a> GlobalConfig<'a> {
                             .map_err(|_| ParseError::InvalidInteger(value))?,
                     )
                 }
-                "separator" => global_config.separator = Some(value),
+                "separator" => global_config.separator = Some(value.to_owned()),
                 "height" | "h" => {
                     global_config.height = Some(
                         value
@@ -48,7 +48,7 @@ impl<'a> GlobalConfig<'a> {
                             .map_err(|_| ParseError::InvalidInteger(value))?,
                     )
                 }
-                "name" | "n" => global_config.name = Some(value),
+                "name" | "n" => global_config.name = Some(value.to_owned()),
                 "colors" | "colours" | "c" => in_colors = true,
                 key if level == 2 && in_colors => {
                     global_config.set_color(key, color()?);

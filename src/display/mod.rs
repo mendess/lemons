@@ -50,7 +50,7 @@ pub trait Bar<W: fmt::Write> {
 
     const PROGRAM: &'static str;
 
-    fn new(sink: W, separator: Option<&'static str>) -> Self;
+    fn new(sink: W, separator: Option<String>) -> Self;
 
     fn cmdline_builder() -> Self::CmdlineArgBuilder;
 

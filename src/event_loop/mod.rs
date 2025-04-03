@@ -179,13 +179,14 @@ where
     B: Bar<String>,
 {
     let global_config = crate::global_config::get();
-    let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.outputs.is_empty() {
+    let (mut bars, mut lemon_inputs, lemon_outputs) = if global_config.cmdline.outputs.is_empty() {
         let (bar, lemon_inputs, lemon_outputs) =
             spawn_bar::<_, _, _, B>(&global_config.to_arg_list::<_, B>(None), 0);
         (vec![bar], vec![lemon_inputs], vec![lemon_outputs])
     } else {
         unzip_n::unzip_n!(3);
         global_config
+            .cmdline
             .outputs
             .iter()
             .map(|g| global_config.to_arg_list::<_, B>(Some(g)))

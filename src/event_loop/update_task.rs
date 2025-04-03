@@ -81,7 +81,7 @@ where
     line.clear();
     let global_config = global_config::get();
     let current_layer = current_layer();
-    let mut bar = B::new(line, global_config.separator);
+    let mut bar = B::new(line, global_config.file_config.separator.clone());
     Alignment::into_enum_iter()
         .map(|a| (a, &config[a]))
         .filter(|(_, c)| !c.is_empty())

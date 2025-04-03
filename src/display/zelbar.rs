@@ -14,7 +14,7 @@ use super::{CmdlineArgBuilder, DisplayBlock, implementations::DisplayColor};
 pub struct Zelbar<W> {
     sink: W,
     alignment: Alignment,
-    separator: Option<&'static str>,
+    separator: Option<String>,
     already_wrote_first_block_of_aligment: bool,
 }
 
@@ -84,7 +84,7 @@ impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
 
     const PROGRAM: &'static str = "zelbar";
 
-    fn new(sink: W, separator: Option<&'static str>) -> Self {
+    fn new(sink: W, separator: Option<String>) -> Self {
         Self {
             sink,
             separator,
@@ -105,7 +105,7 @@ impl<W: fmt::Write> super::Bar<W> for Zelbar<W> {
 
     fn start_block(&mut self, delimit: bool) -> Result<Self::BarBlockBuilder<'_>, fmt::Error> {
         if self.already_wrote_first_block_of_aligment {
-            if let Some(sep) = self.separator.filter(|_| delimit) {
+            if let Some(sep) = self.separator.as_deref().filter(|_| delimit) {
                 write!(self.sink, "{}", self.alignment)?;
                 self.sink.write_str(sep)?;
             }

@@ -1,4 +1,5 @@
 use crate::display::implementations::DisplayColor;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Color {
@@ -68,5 +69,25 @@ impl Color {
 
     pub fn to_hex(&self) -> String {
         DisplayColor::zelbar(*self).to_string()
+    }
+}
+
+impl FromStr for Color {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim_start_matches('#');
+        if s.len() < 6 {
+            Err(format!("{s:?} too short"))
+        } else {
+            let (r, g, b) = (&s[0..2], &s[2..4], &s[4..6]);
+            Ok(Self {
+                r: u8::from_str_radix(r, 16).map_err(|e| e.to_string())?,
+                g: u8::from_str_radix(g, 16).map_err(|e| e.to_string())?,
+                b: u8::from_str_radix(b, 16).map_err(|e| e.to_string())?,
+                a: s.get(6..8)
+                    .map(|a| u8::from_str_radix(a, 16).map_err(|e| e.to_string()))
+                    .transpose()?,
+            })
+        }
     }
 }

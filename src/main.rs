@@ -4,6 +4,7 @@ use env_logger::Env;
 use lemon::{
     display::{self, Program},
     event_loop,
+    global_config::GlobalConfig,
     model::Alignment,
     parsing::parse,
 };
@@ -16,16 +17,8 @@ struct Args {
     /// Path to the config file
     #[arg(short, long)]
     config: Option<PathBuf>,
-    /// The parameters to pass to each bar
-    #[arg(short, long("output"))]
-    outputs: Vec<String>,
-    #[arg(short, long)]
-    tray: bool,
-    #[arg(short, long, default_value = "lemonbar")]
-    program: Program,
-    /// height override
-    #[arg(long)]
-    height_override: Option<u32>,
+    #[command(flatten)]
+    overrides: GlobalConfig,
 }
 
 // TODO:
@@ -64,13 +57,7 @@ async fn main() -> io::Result<()> {
         .and_then(fs::read_to_string)
         .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Couldn't find config file"))?;
     let input = Box::leak(input.into_boxed_str());
-    let blocks = match parse(
-        input,
-        args.outputs,
-        args.tray,
-        args.program,
-        args.height_override,
-    ) {
+    let blocks = match parse(input, args.overrides) {
         Ok(bs) => bs,
         Err(e) => {
             log::error!("Parse error: {:?}", e);
@@ -94,7 +81,7 @@ async fn main() -> io::Result<()> {
     } else {
         drop(bc_recv);
     }
-    match args.program {
+    match lemon::global_config::get().cmdline.program {
         Program::Zelbar => {
             event_loop::start_event_loop::<display::Zelbar<_>>(blocks, bc_send).await
         }

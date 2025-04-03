@@ -6,8 +6,9 @@ pub mod parser;
 use std::num::NonZeroU8;
 
 use crate::{
-    Config, display::Program, global_config::GlobalConfig, model::ActivationLayer,
-    model::block::Block,
+    Config,
+    global_config::{FileConfig, GlobalConfig},
+    model::{ActivationLayer, block::Block},
 };
 
 #[derive(Debug)]
@@ -34,28 +35,24 @@ pub enum ParseError<'a> {
 
 pub type Result<'a, T> = std::result::Result<T, ParseError<'a>>;
 
-pub fn parse(
-    config: &'static str,
-    outputs: Vec<String>,
-    tray: bool,
-    program: Program,
-    height_override: Option<u32>,
-) -> Result<'static, Config<'static>> {
+pub fn parse(config: &'static str, overrides: GlobalConfig) -> Result<'static, Config<'static>> {
     let mut parser = parser::Parser::new(config);
-    let mut global_config = parser
+    let file_config = parser
         .next_section()?
         .map(|(_, kvs)| kvs)
-        .map(GlobalConfig::from_kvs)
+        .map(FileConfig::from_kvs)
         .unwrap_or_else(|| Ok(Default::default()))?;
-    global_config.program = program;
+    let mut global_config = GlobalConfig::new(file_config, overrides);
 
     let mut blocks = Config::default();
     crate::global_config::set(global_config.clone());
-    let bar_spec_count = outputs
+    let bar_spec_count = global_config
+        .cmdline
+        .outputs
         .len()
         .try_into()
         .map_err(|_| ParseError::TooManyBarSpecs {
-            got: outputs.len(),
+            got: global_config.cmdline.outputs.len(),
             max: u8::MAX,
         })
         .map(NonZeroU8::new)?
@@ -75,9 +72,6 @@ pub fn parse(
         blocks[block.alignment].push(block);
     }
     global_config.n_layers += 1;
-    global_config.tray = tray;
-    global_config.outputs = outputs;
-    global_config.height = height_override.or(global_config.height);
     log::debug!("global config loaded: {global_config:?}");
     crate::global_config::set(global_config);
     Ok(blocks)
