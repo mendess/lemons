@@ -210,7 +210,7 @@ async fn player_event_loop(bar_data: BarDataWatcher) -> BarDataWatcher {
 fn update_title(data: &mut Option<BarData>, title: String, player_index: usize) -> bool {
     match data {
         Some(t) => {
-            let old = std::mem::replace(&mut t.title.media_title, Some(title));
+            let old = t.title.media_title.replace(title);
             old != t.title.media_title
         }
         None => {
@@ -228,7 +228,7 @@ fn update_title(data: &mut Option<BarData>, title: String, player_index: usize) 
 fn update_volume(data: &mut Option<BarData>, volume: f64, player_index: usize) -> bool {
     match data {
         Some(d) => {
-            let old = std::mem::replace(&mut d.volume, Some(volume));
+            let old = d.volume.replace(volume);
             old != d.volume
         }
         None => {
@@ -246,7 +246,7 @@ fn update_volume(data: &mut Option<BarData>, volume: f64, player_index: usize) -
 fn update_paused(data: &mut Option<BarData>, paused: bool, player_index: usize) -> bool {
     match data {
         Some(d) => {
-            let old = std::mem::replace(&mut d.paused, Some(paused));
+            let old = d.paused.replace(paused);
             old != d.paused
         }
         None => {
@@ -264,7 +264,7 @@ fn update_paused(data: &mut Option<BarData>, paused: bool, player_index: usize) 
 fn update_chapter(data: &mut Option<BarData>, chapter_title: String, player_index: usize) -> bool {
     match data {
         Some(d) => {
-            let old = std::mem::replace(&mut d.title.chapter, Some(chapter_title));
+            let old = d.title.chapter.replace(chapter_title);
             old != d.title.chapter
         }
         None => {

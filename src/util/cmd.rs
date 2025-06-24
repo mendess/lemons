@@ -33,10 +33,7 @@ pub async fn run_cmd(
     );
     let output = spawned.wait_with_output().await?;
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            String::from_utf8_lossy(&output.stdout),
-        ));
+        return Err(io::Error::other(String::from_utf8_lossy(&output.stdout)));
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
