@@ -11,7 +11,8 @@ use crate::{
     util::signal::valid_rt_signum,
 };
 use std::{
-    convert::TryInto, num::NonZeroU8, result::Result as StdResult, str::FromStr, time::Duration,
+    convert::TryInto, num::NonZeroU8, path::Path, result::Result as StdResult, str::FromStr,
+    time::Duration,
 };
 
 impl FromStr for Alignment {
@@ -181,6 +182,18 @@ impl Block<'static> {
                 }
                 "layer" => {
                     block_b.layer(value.parse().map_err(|_| ParseError::InvalidLayer(value))?);
+                }
+                "pre_condition" => {
+                    let (cond, args) = value.split_once(" ").unwrap_or((value, ""));
+                    match cond {
+                        "file-exists" => {
+                            if args.is_empty() {
+                                return Err(ParseError::InvalidPreconditionArgument(args));
+                            }
+                            block_b.precondition(Precondition::FileExists(Path::new(args)));
+                        }
+                        _ => return Err(ParseError::InvalidPrecondition(cond)),
+                    }
                 }
                 s => {
                     log::warn!("unrecognised option '{}', skipping", s);

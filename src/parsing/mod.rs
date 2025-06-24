@@ -31,6 +31,8 @@ pub enum ParseError<'a> {
     MissingContent,
     TooManyBarSpecs { got: usize, max: u8 },
     NeedAtLeastOneBarSpec,
+    InvalidPrecondition(&'a str),
+    InvalidPreconditionArgument(&'a str),
 }
 
 pub type Result<'a, T> = std::result::Result<T, ParseError<'a>>;

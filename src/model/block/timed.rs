@@ -1,6 +1,6 @@
 use super::{
     super::{ActivationLayer, ActiveMonitors},
-    BlockId, Event, Signal, TaskData,
+    BlockId, Event, Precondition, Signal, TaskData,
 };
 use crate::{
     event_loop::{current_layer, update_task::UpdateChannel},
@@ -36,6 +36,7 @@ async fn start(
         activation_layer,
         monitors,
         signal,
+        precondition,
         ..
     }: TaskData,
 ) {
@@ -55,9 +56,10 @@ async fn start(
             }
         }
     }
-    if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
-        .await
-        .is_err()
+    if Precondition::holds(&precondition).await
+        && update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
+            .await
+            .is_err()
     {
         return;
     }
@@ -81,11 +83,19 @@ async fn start(
                 Err(_) => return,
             }
         }
-        if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
-            .await
-            .is_err()
-        {
-            break;
+        if Precondition::holds(&precondition).await {
+            if update_blocks(block_name, cmd, activation_layer, bid, monitors, &updates)
+                .await
+                .is_err()
+            {
+                break;
+            }
+        } else {
+            for m in monitors.iter() {
+                if updates.send((String::new(), bid, m)).await.is_err() {
+                    break;
+                }
+            }
         }
     }
 }

@@ -109,6 +109,7 @@ pub struct TaskData {
     pub activation_layer: ActivationLayer,
     pub monitors: ActiveMonitors,
     pub signal: Signal,
+    pub precondition: Option<Precondition<'static>>,
 }
 
 pub trait BlockTask: std::fmt::Debug {
@@ -171,6 +172,24 @@ impl TextDecorations {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum Precondition<'a> {
+    FileExists(&'a std::path::Path),
+}
+
+impl Precondition<'_> {
+    pub async fn holds(this: &Option<Precondition<'_>>) -> bool {
+        if let Some(pre) = this {
+            match pre {
+                Precondition::FileExists(path) => {
+                    return matches!(tokio::fs::try_exists(path).await, Ok(true));
+                }
+            }
+        }
+        true
+    }
+}
+
 #[derive(Builder, Debug)]
 #[builder(setter(strip_option), build_fn(skip, name = "build"))]
 pub struct Block<'a> {
@@ -188,6 +207,8 @@ pub struct Block<'a> {
     pub active_in: ActiveMonitors,
     #[builder(default)]
     pub signal: Signal,
+    #[builder(default)]
+    pub precondition: Option<Precondition<'a>>,
 
     // mandatory
     #[builder(setter(skip), default)] // custom setter is just not providing one
@@ -220,6 +241,7 @@ impl Block<'static> {
                 activation_layer: self.layer,
                 monitors: self.active_in,
                 signal: self.signal,
+                precondition: self.precondition,
             },
         )
     }
@@ -250,6 +272,7 @@ impl<'a> BlockBuilder<'a> {
             available_actions,
             task,
             signal: self.signal.unwrap_or(Signal::None),
+            precondition: self.precondition.unwrap_or_default(),
         }
     }
 }
