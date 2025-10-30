@@ -1,6 +1,6 @@
 [package]
 name = "lemon"
-version = "4.3.19"
+version = "4.3.20"
 authors = ["mendess <pedro.mendes.26@gmail.com>"]
 edition = "2024"
 default-run = "lemon"
