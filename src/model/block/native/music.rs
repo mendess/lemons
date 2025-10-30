@@ -186,15 +186,11 @@ async fn player_event_loop(bar_data: BarDataWatcher) -> BarDataWatcher {
                         has_title && data.paused.is_none(),
                     )
                 };
-                if should_update_volume {
-                    if let Ok(volume) = players::volume().await {
-                        bar_data.send_if_modified(|data| update_volume(data, volume, player_index));
-                    }
+                if should_update_volume && let Ok(volume) = players::volume().await {
+                    bar_data.send_if_modified(|data| update_volume(data, volume, player_index));
                 }
-                if should_update_paused {
-                    if let Ok(paused) = players::is_paused().await {
-                        bar_data.send_if_modified(|data| update_paused(data, paused, player_index));
-                    }
+                if should_update_paused && let Ok(paused) = players::is_paused().await {
+                    bar_data.send_if_modified(|data| update_paused(data, paused, player_index));
                 }
             }
             OwnedLibMpvEvent::Shutdown => reset_data(&bar_data).await,

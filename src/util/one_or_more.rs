@@ -48,7 +48,7 @@ impl<T> OneOrMore<T> {
         }
     }
 
-    pub fn iter(&self) -> Iter<T> {
+    pub fn iter(&self) -> Iter<'_, T> {
         match self {
             Self::One(t) => Iter::One(Some(t)),
             Self::More(m) => Iter::More(m.iter()),

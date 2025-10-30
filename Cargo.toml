@@ -34,7 +34,7 @@ xrandr = "0.2.0"
 git = "https://github.com/mendess/m"
 features = ["player"]
 default-features = false
-rev = "d9f9e2f3b4dde825c8f5a585959e739f5a45dbc6"
+rev = "0af321c48ab9a1de363000b3ee0b4a1d7657055b"
 
 [dependencies.tokio]
 version = "1"

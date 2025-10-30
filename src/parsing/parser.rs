@@ -41,7 +41,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn key_value(s: &str) -> Result<(&str, &str)> {
+fn key_value(s: &str) -> Result<'_, (&str, &str)> {
     let colon = s.find(':').ok_or(ParseError::Colon(s))?;
     let (key, value) = s.split_at(colon);
     Ok((key.trim(), value[1..].trim().trim_matches('`')))

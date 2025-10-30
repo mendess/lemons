@@ -445,10 +445,9 @@ impl Monitor {
                 monitor: self.monitor.into(),
             })
             .await
+            && let Some(c) = self.cancelation.take()
         {
-            if let Some(c) = self.cancelation.take() {
-                let _ = c.send(Box::new(e));
-            }
+            let _ = c.send(Box::new(e));
         }
         Ok(())
     }
