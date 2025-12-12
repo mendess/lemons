@@ -42,7 +42,7 @@ features = [ "sync", "rt", "rt-multi-thread", "net", "signal", "process", "time"
 
 [dependencies.hyprland]
 git = "https://github.com/hyprland-community/hyprland-rs"
-rev = "7bbcd08360dce6977b0bfee708339f0250ccae68"
+rev = "ff792b1004598da051bc873eee77f4e2518691db"
 optional = true
 
 [features]

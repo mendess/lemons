@@ -1,12 +1,16 @@
 use core::fmt;
 use std::sync::Arc;
 
-use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture, stream};
+use futures::{
+    FutureExt, StreamExt, TryFutureExt,
+    future::BoxFuture,
+    stream::{self, FuturesUnordered},
+};
 use hyprland::{
     data::{Clients, Workspaces},
     event_listener::{
-        AsyncEventListener, MonitorEventData, WindowEventData, WindowMoveEvent, WindowOpenEvent,
-        WorkspaceDestroyedEventData, WorkspaceRenameEventData,
+        AsyncEventListener, MonitorEventData, NonSpecialWorkspaceEventData, WindowEventData,
+        WindowMoveEvent, WindowOpenEvent, WorkspaceEventData, WorkspaceMovedEventData,
     },
     shared::{Address, HyprData, HyprDataActive, WorkspaceId, WorkspaceType},
 };
@@ -41,197 +45,345 @@ async fn start(
         ..
     }: TaskData,
 ) {
-    let hypr = stream::iter(monitors.iter())
+    let hypr_monitors = loop {
+        match hyprland::data::Monitors::get_async().await {
+            Ok(ms) => break ms,
+            Err(e) => {
+                log::error!("failed to get monitors: {e:?}");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+    };
+    let (monitors, mut cancelations) = stream::iter(monitors.iter())
         .map(|m| match m {
             crate::model::AffectedMonitor::Single(n) => n,
             crate::model::AffectedMonitor::All => {
                 unreachable!("multi_monitor should always be enabled for this block")
             }
         })
-        .map(|mon| {
+        .zip(stream::iter(hypr_monitors))
+        .then(|(mon, mut hypr_mon)| {
             let mut updates = updates.clone();
             async move {
-                let (state, cancelation) = {
-                    let (mut m, cancelation) = {
-                        loop {
-                            match Monitor::new(updates, bid, mon.into()).await {
-                                Ok(m) => break m,
-                                Err((ch, e)) => {
-                                    updates = ch;
-                                    let error_update =
-                                        (format!("failed to get monitor: {e}"), bid, mon);
-                                    updates
-                                        .send(error_update)
-                                        .await
-                                        .expect("failed to send block update");
-                                    log::error!("failed getting monitor {e:?}");
-                                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                                }
+                let (mut m, cancelation) = {
+                    loop {
+                        match Monitor::new(updates, bid, mon.into(), hypr_mon).await {
+                            Ok(m) => break m,
+                            Err(((ch, m), e)) => {
+                                updates = ch;
+                                hypr_mon = m;
+                                let error_update =
+                                    (format!("failed to get monitor: {e}"), bid, mon);
+                                updates
+                                    .send(error_update)
+                                    .await
+                                    .expect("failed to send block update");
+                                log::error!("failed getting monitor {e:?}");
+                                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                             }
                         }
-                    };
-                    if let Err(e) = m.emit().await {
-                        log::error!("failed to emit event: {e:?}");
-                    };
-                    (Arc::new(Mutex::new(m)), cancelation)
-                };
-                let mut listener = AsyncEventListener::new();
-                listener.add_urgent_state_handler(handler(
-                    &state,
-                    |state, address: Address| async move {
-                        let mut state = state.lock().await;
-                        let Some(ws) = state.find_window(&address) else {
-                            return;
-                        };
-                        ws.urgent = true;
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_active_window_change_handler(handler(
-                    &state,
-                    |state, event: Option<WindowEventData>| async move {
-                        let mut state = state.lock().await;
-                        let Some(event) = event else {
-                            return;
-                        };
-                        let Some(w) = state.find_window(&event.window_address) else {
-                            return;
-                        };
-                        w.urgent = false;
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_window_open_handler(handler(
-                    &state,
-                    |state, open_event: WindowOpenEvent| async move {
-                        let mut state = state.lock().await;
-                        if let Some(ws) = state.find_ws_by_name(&open_event.workspace_name) {
-                            ws.windows.push(open_event.window_address.into());
-                        }
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_window_moved_handler(handler(
-                    &state,
-                    |state, move_event: WindowMoveEvent| async move {
-                        let mut state = state.lock().await;
-                        state.remove_window(&move_event.window_address);
-                        match state
-                            .find_ws_by_name_or_create(&move_event.workspace_name)
-                            .await
-                        {
-                            Ok(Some(w)) => w.windows.push(move_event.window_address.into()),
-                            Ok(None) => {}
-                            Err(e) => log::error!("failed to create target ws: {e:?}"),
-                        }
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_window_close_handler(handler(
-                    &state,
-                    |state, address: Address| async move {
-                        let mut state = state.lock().await;
-                        state.remove_window(&address);
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_workspace_added_handler(handler(
-                    &state,
-                    move |state, ws: WorkspaceType| async move {
-                        if let WorkspaceType::Regular(ws_name) = ws {
-                            let mut state = state.lock().await;
-                            match state.find_ws_by_name_or_create(&ws_name).await {
-                                Ok(Some(_) | None) => {}
-                                Err(e) => log::error!("creating the workspace: {e:?}"),
-                            };
-                            if let Err(e) = state.emit().await {
-                                log::error!("failed to emit event: {e:?}");
-                            };
-                        }
-                    },
-                ));
-                listener.add_workspace_destroy_handler(handler(
-                    &state,
-                    move |state, event: WorkspaceDestroyedEventData| async move {
-                        let mut state = state.lock().await;
-                        state.ws.retain(|ws| ws.name != event.workspace_name);
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-                listener.add_workspace_change_handler(handler(
-                    &state,
-                    move |state, ws: WorkspaceType| async move {
-                        if let WorkspaceType::Regular(ws_name) = ws {
-                            let mut state = state.lock().await;
-                            if let Some(ws) = state.find_ws_by_name(&ws_name) {
-                                state.visible_ws = Some(ws.id);
-                            }
-                            if let Err(e) = state.emit().await {
-                                log::error!("failed to emit event: {e:?}");
-                            };
-                        }
-                    },
-                ));
-                listener.add_workspace_rename_handler(handler(
-                    &state,
-                    move |state, ws: WorkspaceRenameEventData| async move {
-                        let mut state = state.lock().await;
-                        if let Some(w) = state.ws.iter_mut().find(|w| w.id == ws.workspace_id) {
-                            w.name = ws.workspace_name;
-                            if let Err(e) = state.emit().await {
-                                log::error!("failed to emit event: {e:?}");
-                            };
-                        }
-                    },
-                ));
-                listener.add_active_monitor_change_handler(handler(
-                    &state,
-                    move |state, m: MonitorEventData| async move {
-                        let mut state = state.lock().await;
-                        if let WorkspaceType::Regular(ws_name) = m.workspace {
-                            state.is_focused = state.find_ws_by_name(&ws_name).is_some();
-                        }
-                        if let Err(e) = state.emit().await {
-                            log::error!("failed to emit event: {e:?}");
-                        };
-                    },
-                ));
-
-                tokio::select! {
-                    e = cancelation => {
-                        log::error!("hyprland module shutting down: {e:?}");
-                        Ok(())
                     }
-                    r = listener.start_listener_async() => r,
-                }
+                };
+                if let Err(e) = m.emit().await {
+                    log::error!("failed to emit event: {e:?}");
+                };
+                (m, cancelation)
             }
         })
-        .zip(stream::iter(monitors.iter()))
-        .map(|(fut, mon)| async move { (mon, fut.await) })
-        .buffered(monitors.len().get())
-        .for_each(|(mon, result)| async move {
-            if let Err(e) = result {
-                log::error!("hyprland daemon for monitor {mon} failed: {e}")
+        .collect::<(Vec<_>, FuturesUnordered<_>)>()
+        .await;
+    let monitors = Arc::new(Mutex::new(Monitors { monitors }));
+    let mut listener = AsyncEventListener::new();
+    listener.add_urgent_state_changed_handler(handler(
+        &monitors,
+        |monitors, address: Address| async move {
+            log::trace!("add_urgent_state_changed_handler: {address:?}");
+            let mut monitors = monitors.lock().await;
+            let Some((id, ws)) = monitors.find_window(&address) else {
+                return;
+            };
+            ws.urgent = true;
+            if let Err(e) = monitors.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            };
+        },
+    ));
+    listener.add_active_window_changed_handler(handler(
+        &monitors,
+        |state, event: Option<WindowEventData>| async move {
+            log::trace!("add_active_window_changed_handler: {event:?}");
+            let mut state = state.lock().await;
+            let Some(event) = event else {
+                return;
+            };
+            let Some((id, w)) = state.find_window(&event.address) else {
+                return;
+            };
+            w.urgent = false;
+            if let Err(e) = state.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            };
+        },
+    ));
+    listener.add_window_opened_handler(handler(
+        &monitors,
+        |monitors, open_event: WindowOpenEvent| async move {
+            log::trace!("add_window_opened_handler: {open_event:?}");
+            let mut monitors = monitors.lock().await;
+            let Some((id, ws)) = monitors.find_ws_by_name(&open_event.workspace_name) else {
+                return;
+            };
+            ws.windows.push(open_event.window_address.into());
+            if let Err(e) = monitors.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            };
+        },
+    ));
+    listener.add_window_moved_handler(handler(
+        &monitors,
+        |monitors, move_event: WindowMoveEvent| async move {
+            log::trace!("add_window_moved_handler: {move_event:?}");
+            let WorkspaceType::Regular(ws_name) = move_event.workspace_name else {
+                return;
+            };
+            let mut monitors = monitors.lock().await;
+            monitors.remove_window(&move_event.window_address);
+            match monitors.find_ws_by_name_or_create(&ws_name).await {
+                Ok(Some((_, w))) => {
+                    w.windows.push(move_event.window_address.into());
+                }
+                Ok(None) => {}
+                Err(e) => log::error!("failed to create target ws: {e:?}"),
             }
-        });
+            for m in monitors.monitors.iter_mut() {
+                if let Err(e) = m.emit().await {
+                    log::error!("failed to emit event: {e:?}");
+                };
+            }
+        },
+    ));
+    listener.add_window_closed_handler(handler(
+        &monitors,
+        |monitors, address: Address| async move {
+            log::trace!("add_window_closed_handler: {address:?}");
+            let mut monitors = monitors.lock().await;
+            let Some(id) = monitors.remove_window(&address) else {
+                return;
+            };
+            if let Err(e) = monitors.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            };
+        },
+    ));
+    listener.add_workspace_added_handler(handler(
+        &monitors,
+        move |monitors, ws: WorkspaceEventData| async move {
+            log::trace!("add_workspace_added_handler: {ws:?}");
+            if let WorkspaceType::Regular(ws_name) = ws.name {
+                let mut monitors = monitors.lock().await;
+                match monitors.find_ws_by_name_or_create(&ws_name).await {
+                    Ok(Some((id, _))) => {
+                        if let Err(e) = monitors.emit(id).await {
+                            log::error!("failed to emit event: {e:?}");
+                        };
+                    }
+                    Ok(None) => {}
+                    Err(e) => log::error!("creating the workspace: {e:?}"),
+                };
+            }
+        },
+    ));
+    listener.add_workspace_deleted_handler(handler(
+        &monitors,
+        move |monitors, event: WorkspaceEventData| async move {
+            log::trace!("add_workspace_deleted_handler: {event:?}");
+            let WorkspaceType::Regular(ws_name) = event.name else {
+                return;
+            };
+            let mut monitors = monitors.lock().await;
+            for m in monitors.monitors.iter_mut() {
+                m.ws.retain(|ws| ws.name != ws_name);
+                if let Err(e) = m.emit().await {
+                    log::error!("failed to emit event: {e:?}");
+                };
+            }
+        },
+    ));
+    listener.add_workspace_changed_handler(handler(
+        &monitors,
+        move |monitors, ws: WorkspaceEventData| async move {
+            log::trace!("add_workspace_changed_handler: {ws:?}");
+            if let WorkspaceType::Regular(ws_name) = ws.name {
+                let mut monitors = monitors.lock().await;
+                let Some((id, ws)) = monitors.find_ws_by_name(&ws_name) else {
+                    return;
+                };
+                let ws_id = ws.id;
+                let Some(m) = monitors.find_by(|m| m.monitor == id) else {
+                    return;
+                };
+                m.visible_ws = Some(ws_id);
+                if let Err(e) = m.emit().await {
+                    log::error!("failed to emit event: {e:?}");
+                };
+            }
+        },
+    ));
+    listener.add_workspace_renamed_handler(handler(
+        &monitors,
+        move |monitors, ws: NonSpecialWorkspaceEventData| async move {
+            log::trace!("add_workspace_renamed_handler: {ws:?}");
+            let mut monitors = monitors.lock().await;
+            let Some((id, w)) = monitors.find_map_by(|m| m.ws.iter_mut().find(|w| w.id == ws.id))
+            else {
+                return;
+            };
+            w.name = ws.name;
+            if let Err(e) = monitors.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            };
+        },
+    ));
+    listener.add_active_monitor_changed_handler(handler(
+        &monitors,
+        move |monitors, m: MonitorEventData| async move {
+            log::trace!("add_active_monitor_changed_handler: {m:?}");
+            let mut monitors = monitors.lock().await;
+            let Some(WorkspaceType::Regular(ws_name)) = m.workspace_name else {
+                return;
+            };
+
+            for m in monitors.monitors.iter_mut() {
+                m.is_focused = m.find_ws_by_name(&ws_name).is_some();
+                if let Err(e) = m.emit().await {
+                    log::error!("failed to emit event: {e:?}");
+                };
+            }
+        },
+    ));
+    listener.add_workspace_moved_handler(handler(
+        &monitors,
+        move |monitors, move_event: WorkspaceMovedEventData| async move {
+            log::trace!("add_workspace_moved_handler: {move_event:?}");
+            let WorkspaceType::Regular(ws_name) = move_event.name else {
+                return;
+            };
+            let mut monitors = monitors.lock().await;
+            let Some((id, moved_ws)) = monitors.find_map_by(|m| {
+                let ws =
+                    m.ws.iter()
+                        .position(|w| w.name == ws_name)
+                        .map(|i| m.ws.remove(i));
+                if let Some(ws) = &ws
+                    && m.visible_ws == Some(ws.id)
+                {
+                    m.visible_ws = None;
+                }
+                ws
+            }) else {
+                return;
+            };
+            let Some(m) = monitors.find_by(|m| m.name.as_ref() == move_event.monitor.as_str())
+            else {
+                return;
+            };
+            let ws_id = moved_ws.id;
+            m.ws.push(moved_ws);
+            m.ws.sort_by_key(|w| w.id);
+            m.visible_ws = Some(ws_id);
+            if let Err(e) = m.emit().await {
+                log::error!("failed to emit event: {e:?}");
+            };
+            if let Err(e) = monitors.emit(id).await {
+                log::error!("failed to emit event: {e:?}");
+            }
+        },
+    ));
 
     let cancel = async { while events.recv().await.is_ok() {} };
-
     tokio::select! {
-        _ = hypr => {}
-        _ = cancel => {}
+        e = cancelations.next() => {
+            log::error!("hyprland module shutting down: {e:?}");
+        }
+        _ = cancel => {
+            log::error!("hyprland module shutting down: no more events comming");
+        }
+        r = listener.start_listener_async() => {
+            if let Err(e) = r {
+                log::error!("hyprland daemon failed: {e}")
+            }
+        }
+    }
+}
+
+struct Monitors {
+    monitors: Vec<Monitor>,
+}
+
+impl Monitors {
+    fn find_by(&mut self, f: impl Fn(&Monitor) -> bool) -> Option<&mut Monitor> {
+        self.monitors.iter_mut().find(|m| f(m))
+    }
+
+    fn find_map_by<'s, R: 's>(
+        &'s mut self,
+        f: impl Fn(&'s mut Monitor) -> Option<R>,
+    ) -> Option<(u8, R)> {
+        self.monitors.iter_mut().find_map(|m| {
+            let id = m.monitor;
+            f(m).map(|r| (id, r))
+        })
+    }
+
+    fn find_window(&mut self, addr: &Address) -> Option<(u8, &mut Window)> {
+        for m in &mut self.monitors {
+            let id = m.monitor;
+            if let Some(w) = m.find_window(addr) {
+                return Some((id, w));
+            }
+        }
+        None
+    }
+
+    fn find_ws_by_name(&mut self, name: &str) -> Option<(u8, &mut Ws)> {
+        for m in &mut self.monitors {
+            let id = m.monitor;
+            if let Some(w) = m.find_ws_by_name(name) {
+                return Some((id, w));
+            }
+        }
+        None
+    }
+
+    async fn find_ws_by_name_or_create(
+        &mut self,
+        name: &str,
+    ) -> hyprland::Result<Option<(u8, &mut Ws)>> {
+        for m in &mut self.monitors {
+            let id = m.monitor;
+            if let Some(w) = m.find_ws_by_name_or_create(name).await? {
+                return Ok(Some((id, w)));
+            }
+        }
+        Ok(None)
+    }
+
+    fn remove_window(&mut self, addr: &Address) -> Option<u8> {
+        for m in &mut self.monitors {
+            if m.remove_window(addr) {
+                return Some(m.monitor);
+            }
+        }
+        None
+    }
+
+    async fn emit(&mut self, id: u8) -> fmt::Result {
+        self.monitors
+            .iter_mut()
+            .find(|m| m.monitor == id)
+            .unwrap()
+            .emit()
+            .await
     }
 }
 
@@ -265,6 +417,7 @@ struct Monitor {
     sender: UpdateChannel,
     block_id: BlockId,
     monitor: u8,
+    name: Box<str>,
     /// Starts as true and turns to false as soon as a send error is encountered when emit is
     /// called.
     cancelation: Option<oneshot::Sender<CancelationError>>,
@@ -277,9 +430,13 @@ impl Monitor {
         sender: UpdateChannel,
         block_id: BlockId,
         monitor: i128,
+        hypr_mon: hyprland::data::Monitor,
     ) -> Result<
         (Self, oneshot::Receiver<CancelationError>),
-        (UpdateChannel, hyprland::shared::HyprError),
+        (
+            (UpdateChannel, hyprland::data::Monitor),
+            hyprland::error::HyprError,
+        ),
     > {
         let data = tokio::try_join!(
             Workspaces::get_async().map_err(|e| {
@@ -297,12 +454,12 @@ impl Monitor {
         );
         let (ws, clients, active_monitor) = match data {
             Ok(x) => x,
-            Err(e) => return Err((sender, e)),
+            Err(e) => return Err(((sender, hypr_mon), e)),
         };
         let mut ws = ws
             .into_iter()
             .filter(|w| w.id > 0)
-            .filter(|w| w.monitor_id == monitor)
+            .filter(|w| w.monitor_id == Some(monitor))
             .map(|w| Ws {
                 id: w.id,
                 name: w.name,
@@ -332,6 +489,7 @@ impl Monitor {
                 sender,
                 block_id,
                 monitor: monitor.try_into().unwrap(),
+                name: hypr_mon.name.into_boxed_str(),
                 cancelation: Some(cancelation_tx),
             },
             cancelation_rx,
@@ -360,7 +518,7 @@ impl Monitor {
                 else {
                     return Ok(None);
                 };
-                if new_ws.monitor_id == self.monitor.into() {
+                if new_ws.monitor_id == Some(self.monitor.into()) {
                     self.ws.push(Ws {
                         id: new_ws.id,
                         name: new_ws.name,
@@ -375,10 +533,10 @@ impl Monitor {
         }
     }
 
-    fn remove_window(&mut self, addr: &Address) {
+    fn remove_window(&mut self, addr: &Address) -> bool {
         self.ws
             .iter_mut()
-            .for_each(|w| w.windows.retain(|w| w.addr != *addr));
+            .any(|w| w.windows.extract_if(.., |w| w.addr == *addr).count() > 1)
     }
 
     async fn emit(&mut self) -> fmt::Result {
@@ -454,11 +612,11 @@ impl Monitor {
 }
 
 fn handler<D, F, Fut>(
-    state: &Arc<Mutex<Monitor>>,
+    state: &Arc<Mutex<Monitors>>,
     f: F,
 ) -> impl Fn(D) -> VoidFuture + use<D, F, Fut>
 where
-    F: Fn(Arc<Mutex<Monitor>>, D) -> Fut + Send,
+    F: Fn(Arc<Mutex<Monitors>>, D) -> Fut + Send,
     D: Send + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
