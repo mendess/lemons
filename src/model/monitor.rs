@@ -4,16 +4,11 @@ use crate::util::one_or_more::OneOrMore;
 
 use super::AffectedMonitor;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ActiveMonitors {
+    #[default]
     All,
     MonitorCount(NonZeroU8),
-}
-
-impl Default for ActiveMonitors {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl ActiveMonitors {

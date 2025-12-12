@@ -77,8 +77,9 @@ impl Indexes {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ActivationLayer {
+    #[default]
     All,
     L(u16),
 }
@@ -105,12 +106,6 @@ impl ActivationLayer {
             Self::L(n) => Self::L((*n + 1) % bound),
             Self::All => panic!("Can't next an all layer"),
         }
-    }
-}
-
-impl Default for ActivationLayer {
-    fn default() -> Self {
-        Self::All
     }
 }
 
