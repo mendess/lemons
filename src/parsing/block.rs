@@ -190,7 +190,7 @@ impl Block<'static> {
                             if args.is_empty() {
                                 return Err(ParseError::InvalidPreconditionArgument(args));
                             }
-                            block_b.precondition(Precondition::FileExists(Path::new(args)));
+                            block_b.precondition(Precondition::file_exists(Path::new(args)));
                         }
                         _ => return Err(ParseError::InvalidPrecondition(cond)),
                     }

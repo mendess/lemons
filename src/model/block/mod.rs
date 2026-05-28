@@ -172,12 +172,24 @@ impl TextDecorations {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Precondition<'a> {
-    FileExists(&'a std::path::Path),
+    FileExists(std::borrow::Cow<'a, std::path::Path>),
 }
 
-impl Precondition<'_> {
+impl<'a> Precondition<'a> {
+    pub fn file_exists(path: &'a std::path::Path) -> Self {
+        let mut components = path.components();
+        if components.next().map(|c| c.as_os_str()) == Some(std::ffi::OsStr::new("~")) {
+            let mut home = std::env::home_dir()
+                .expect("can't determine home directory to parse file-exists precondition");
+            home.extend(components);
+            Self::FileExists(std::borrow::Cow::Owned(home))
+        } else {
+            Self::FileExists(std::borrow::Cow::Borrowed(path))
+        }
+    }
+
     pub async fn holds(this: &Option<Precondition<'_>>) -> bool {
         if let Some(pre) = this {
             match pre {
@@ -241,7 +253,7 @@ impl Block<'static> {
                 activation_layer: self.layer,
                 monitors: self.active_in,
                 signal: self.signal,
-                precondition: self.precondition,
+                precondition: self.precondition.clone(),
             },
         )
     }
