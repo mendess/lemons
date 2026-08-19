@@ -12,11 +12,13 @@ use crate::{
 use derive_builder::Builder;
 use futures::future::BoxFuture;
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     ops::{Index, IndexMut},
-    os::raw::c_int,
+    os::{raw::c_int, unix::fs::PermissionsExt},
+    path::Path,
 };
-use tokio::sync::broadcast;
+use tokio::{fs, sync::broadcast};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BlockText {
@@ -174,31 +176,49 @@ impl TextDecorations {
 
 #[derive(Clone, Debug)]
 pub enum Precondition<'a> {
-    FileExists(std::borrow::Cow<'a, std::path::Path>),
+    FileExists(Cow<'a, Path>),
+    ProgramInstalled(Cow<'a, str>),
 }
 
 impl<'a> Precondition<'a> {
-    pub fn file_exists(path: &'a std::path::Path) -> Self {
+    pub fn file_exists(path: &'a Path) -> Self {
         let mut components = path.components();
         if components.next().map(|c| c.as_os_str()) == Some(std::ffi::OsStr::new("~")) {
             let mut home = std::env::home_dir()
                 .expect("can't determine home directory to parse file-exists precondition");
             home.extend(components);
-            Self::FileExists(std::borrow::Cow::Owned(home))
+            Self::FileExists(Cow::Owned(home))
         } else {
-            Self::FileExists(std::borrow::Cow::Borrowed(path))
+            Self::FileExists(Cow::Borrowed(path))
         }
     }
 
+    pub fn program_installed(name: &'a str) -> Self {
+        Self::ProgramInstalled(Cow::Borrowed(name))
+    }
+
     pub async fn holds(this: &Option<Precondition<'_>>) -> bool {
-        if let Some(pre) = this {
-            match pre {
-                Precondition::FileExists(path) => {
-                    return matches!(tokio::fs::try_exists(path).await, Ok(true));
+        let Some(pre) = this else {
+            return true;
+        };
+        match pre {
+            Precondition::FileExists(path) => {
+                return matches!(fs::try_exists(path).await, Ok(true));
+            }
+            Precondition::ProgramInstalled(name) => {
+                let path = std::env::var("PATH").unwrap_or_else(|_| Default::default());
+                for prefix in path.split(':') {
+                    let path_to_bin = Path::new(&prefix).join(name.as_ref());
+                    if let Ok(meta) = fs::metadata(path_to_bin).await
+                        && meta.is_file()
+                        && meta.permissions().mode() & 0o111 != 0
+                    {
+                        return true;
+                    }
                 }
+                false
             }
         }
-        true
     }
 }
 

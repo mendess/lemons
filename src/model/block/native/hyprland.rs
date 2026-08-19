@@ -583,7 +583,7 @@ impl Monitor {
                 }
                 crate::model::block::BlockText {
                     decorations,
-                    text: format!(" {} ", &w.name),
+                    text: format!(" {} ", w.name),
                 }
             })
             .collect();

@@ -192,6 +192,12 @@ impl Block<'static> {
                             }
                             block_b.precondition(Precondition::file_exists(Path::new(args)));
                         }
+                        "program-installed" => {
+                            if args.is_empty() {
+                                return Err(ParseError::InvalidPreconditionArgument(args));
+                            }
+                            block_b.precondition(Precondition::program_installed(args));
+                        }
                         _ => return Err(ParseError::InvalidPrecondition(cond)),
                     }
                 }
